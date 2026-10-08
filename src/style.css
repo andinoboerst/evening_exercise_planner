@@ -1072,13 +1072,75 @@ body {
   font-style: italic;
 }
 
-/* In-App Spotify Player Box */
-.spotify-inapp-player-card {
-  background: rgba(29, 185, 84, 0.05);
-  border: 1px solid rgba(29, 185, 84, 0.25);
+/* Audio Source Mode Selector */
+.audio-source-strip {
+  display: flex;
+  gap: 6px;
+  background: var(--bg-surface-elevated);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+
+.audio-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 8px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-tab-btn:hover {
+  color: var(--text-main);
+}
+
+.audio-tab-btn.active {
+  background: var(--bg-surface);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-accent);
+}
+
+.audio-tab-btn.spotify-tab.active {
+  border-color: var(--spotify-green);
+  color: #86efac;
+}
+
+/* In-App Spotify Player Box & Dock */
+.spotify-inapp-player-card, .spotify-player-dock {
+  background: rgba(29, 185, 84, 0.06);
+  border: 1px solid rgba(29, 185, 84, 0.3);
   border-radius: var(--radius-md);
   padding: 12px 14px;
-  margin-bottom: 18px;
+  margin-top: 14px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.spotify-player-dock.hidden {
+  display: none !important;
+}
+
+.spotify-icon-dot {
+  display: inline-block;
+  font-size: 1.15rem;
+  animation: pulse-spotify 2.2s infinite ease-in-out;
+}
+
+@keyframes pulse-spotify {
+  0%, 100% { transform: scale(1); opacity: 0.95; }
+  50% { transform: scale(1.15); opacity: 0.65; }
 }
 
 .spotify-inapp-header {
@@ -1095,7 +1157,7 @@ body {
 }
 
 .spotify-inapp-sub {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--spotify-green);
   display: block;
 }

@@ -44,9 +44,12 @@ function getEnabledDurationMin() {
 let settings = {
   voiceEnabled: true,
   soundEffectsEnabled: true,
-  ambientMode: 'drone', // 'drone', 'rain', 'silence'
-  spotifyAutoLaunch: true
+  audioSource: 'spotify', // 'spotify' (default!), 'ambient', 'silent'
+  ambientSound: 'drone'   // 'drone', 'rain', 'bowls'
 };
+
+let spotifyEmbedController = null;
+let pendingSpotifyPlay = false;
 
 // Flattened steps calculation for exact timeline
 function buildFlattenedSteps(routine) {
@@ -182,6 +185,41 @@ function renderApp() {
       <!-- Injected via updateStageUI() -->
     </main>
 
+    <!-- Persistent Spotify Bedtime Player Dock (Mounted once, never unmounted across routine transitions!) -->
+    <div id="spotify-player-dock" class="spotify-player-dock ${settings.audioSource === 'spotify' ? '' : 'hidden'}">
+      <div class="spotify-inapp-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="spotify-icon-dot">🎧</span>
+          <div>
+            <span class="spotify-inapp-title" id="spotify-dock-title">${spotifyService.getActivePlaylist().name}</span>
+            <span class="spotify-inapp-sub" id="spotify-dock-status">
+              ${isRunning ? '▶ Playing Bedtime Music' : (spotifyService.isConnected() ? 'Spotify Connected • Auto-Plays on Start' : 'In-App Player • Auto-Plays on Start')}
+            </span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button id="btn-dock-play-pause" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; display: ${isRunning ? 'inline-flex' : 'none'};">
+            ${isPaused ? '▶ Resume' : '⏸ Pause'}
+          </button>
+          <button id="btn-dock-change-playlist" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;">
+            Change
+          </button>
+        </div>
+      </div>
+      <div id="spotify-embed-container" style="margin-top: 8px;">
+        <iframe 
+          id="spotify-embed-frame"
+          style="border-radius: 12px; border: none;"
+          src="https://open.spotify.com/embed/playlist/${spotifyService.getActivePlaylistId()}?utm_source=generator&theme=0" 
+          width="100%" 
+          height="80" 
+          frameBorder="0" 
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+          loading="eager"
+        ></iframe>
+      </div>
+    </div>
+
     <!-- Overall Session Progress Bar (Bottom) -->
     <div style="margin-top: 14px; margin-bottom: 12px;">
       <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 4px;">
@@ -221,6 +259,8 @@ function renderApp() {
 
   bindEvents();
   updateStageUI();
+  initSpotifyEmbedController();
+  updateDockState();
 }
 
 // Render either the Idle Card or Active Workout Card
@@ -279,31 +319,43 @@ function updateStageUI() {
           </div>
         </div>
 
-        <!-- In-App Spotify Bedtime Soundtrack Box -->
-        <div class="spotify-inapp-player-card">
-          <div class="spotify-inapp-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 1.15rem;">🎧</span>
-              <div>
-                <span class="spotify-inapp-title">${spotifyService.getActivePlaylist().name}</span>
-                <span class="spotify-inapp-sub">${spotifyService.isConnected() ? 'Spotify Connected • Background Auto-Play' : 'In-App Bedtime Soundtrack'}</span>
-              </div>
-            </div>
-            <button id="btn-quick-change-playlist" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;">
-              Change
+        <!-- Audio Source Selector -->
+        <div style="margin-bottom: 14px;">
+          <div style="font-size: 0.74rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+            Bedtime Audio Mode:
+          </div>
+          <div class="audio-source-strip">
+            <button class="audio-tab-btn spotify-tab ${settings.audioSource === 'spotify' ? 'active' : ''}" id="tab-src-spotify">
+              <span>🟢 Spotify Music</span>
+            </button>
+            <button class="audio-tab-btn ${settings.audioSource === 'ambient' ? 'active' : ''}" id="tab-src-ambient">
+              <span>🟣 Ambient Sounds</span>
+            </button>
+            <button class="audio-tab-btn ${settings.audioSource === 'silent' ? 'active' : ''}" id="tab-src-silent">
+              <span>⚪ Timer Only</span>
             </button>
           </div>
-          <iframe 
-            id="spotify-embed-frame"
-            style="border-radius: 12px; border: none; margin-top: 8px;"
-            src="https://open.spotify.com/embed/playlist/${spotifyService.getActivePlaylistId()}?utm_source=generator&theme=0" 
-            width="100%" 
-            height="80" 
-            frameBorder="0" 
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
-            loading="lazy"
-          ></iframe>
         </div>
+
+        ${settings.audioSource === 'ambient' ? `
+          <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 18px;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #c4b5fd; margin-bottom: 8px;">Select Ambient Soundscape:</div>
+            <div style="display: flex; gap: 6px;">
+              <button class="day-chip ${settings.ambientSound === 'drone' ? 'active' : ''}" id="btn-amb-choice-drone" style="flex: 1; padding: 8px 4px;">
+                <span class="day-chip-name">432Hz Om</span>
+                <span class="day-chip-state" style="font-size: 0.74rem;">Sleep Drone</span>
+              </button>
+              <button class="day-chip ${settings.ambientSound === 'rain' ? 'active' : ''}" id="btn-amb-choice-rain" style="flex: 1; padding: 8px 4px;">
+                <span class="day-chip-name">Night Rain</span>
+                <span class="day-chip-state" style="font-size: 0.74rem;">Rainfall</span>
+              </button>
+              <button class="day-chip ${settings.ambientSound === 'bowls' ? 'active' : ''}" id="btn-amb-choice-bowls" style="flex: 1; padding: 8px 4px;">
+                <span class="day-chip-name">Zen Bowls</span>
+                <span class="day-chip-state" style="font-size: 0.74rem;">Harmonics</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
 
         <button id="btn-start-routine" class="btn-primary-start">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -321,16 +373,46 @@ function updateStageUI() {
             <input type="checkbox" id="chk-beeps" ${settings.soundEffectsEnabled ? 'checked' : ''} />
             <span>Sound Bells</span>
           </label>
-          <label class="quick-toggle-item">
-            <input type="checkbox" id="chk-ambient" ${settings.ambientMode !== 'silence' ? 'checked' : ''} />
-            <span>Ambient Drone</span>
-          </label>
         </div>
       </section>
     `;
 
     document.getElementById('btn-start-routine').addEventListener('click', startRoutine);
-    document.getElementById('btn-quick-change-playlist')?.addEventListener('click', openMusicHub);
+
+    // Audio source tab listeners (seamless, without wiping the page)
+    document.getElementById('tab-src-spotify')?.addEventListener('click', () => {
+      settings.audioSource = 'spotify';
+      audioEngine.stopAmbient();
+      updateDockState();
+      updateStageUI();
+    });
+    document.getElementById('tab-src-ambient')?.addEventListener('click', () => {
+      settings.audioSource = 'ambient';
+      if (spotifyEmbedController) {
+        try { spotifyEmbedController.pause(); } catch (_) {}
+      }
+      spotifyService.pause();
+      updateDockState();
+      updateStageUI();
+    });
+    document.getElementById('tab-src-silent')?.addEventListener('click', () => {
+      settings.audioSource = 'silent';
+      audioEngine.stopAmbient();
+      if (spotifyEmbedController) {
+        try { spotifyEmbedController.pause(); } catch (_) {}
+      }
+      spotifyService.pause();
+      updateDockState();
+      updateStageUI();
+    });
+
+    // Ambient choices listeners
+    ['drone', 'rain', 'bowls'].forEach(soundType => {
+      document.getElementById(`btn-amb-choice-${soundType}`)?.addEventListener('click', () => {
+        settings.ambientSound = soundType;
+        updateStageUI();
+      });
+    });
 
     // Phase toggle handlers
     const handlePhaseToggle = (phaseKey) => {
@@ -357,10 +439,6 @@ function updateStageUI() {
       audioEngine.soundEffectsEnabled = settings.soundEffectsEnabled;
       const btn = document.getElementById('btn-audio-toggle');
       if (btn) btn.classList.toggle('active', settings.soundEffectsEnabled);
-    });
-    document.getElementById('chk-ambient').addEventListener('change', (e) => {
-      settings.ambientMode = e.target.checked ? 'drone' : 'silence';
-      audioEngine.ambientMode = settings.ambientMode;
     });
 
 
@@ -479,6 +557,99 @@ function updateStageUI() {
   }
 }
 
+// Helper to update the phase pills highlight without recreating the DOM
+function updatePhasePills() {
+  const pills = document.querySelectorAll('.phase-pill');
+  pills.forEach((pill, idx) => {
+    pill.classList.toggle('current-phase', isRunning && currentPhaseIndex === idx);
+  });
+}
+
+// Helper to update persistent dock appearance and controls
+function updateDockState() {
+  const dock = document.getElementById('spotify-player-dock');
+  if (!dock) return;
+
+  if (settings.audioSource === 'spotify') {
+    dock.classList.remove('hidden');
+    dock.style.display = 'block';
+  } else {
+    dock.classList.add('hidden');
+    dock.style.display = 'none';
+  }
+
+  const statusEl = document.getElementById('spotify-dock-status');
+  if (statusEl) {
+    if (isRunning) {
+      statusEl.textContent = isPaused ? '⏸ Paused' : '▶ Playing Bedtime Music';
+    } else {
+      statusEl.textContent = spotifyService.isConnected() 
+        ? 'Spotify Connected • Auto-Plays on Start' 
+        : 'In-App Player • Auto-Plays on Start';
+    }
+  }
+
+  const btnPause = document.getElementById('btn-dock-play-pause');
+  if (btnPause) {
+    btnPause.style.display = isRunning ? 'inline-flex' : 'none';
+    btnPause.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+  }
+}
+
+// Initialize Spotify Iframe API Controller once
+function initSpotifyEmbedController() {
+  const container = document.getElementById('spotify-embed-container');
+  if (!container) return;
+
+  const mount = (IFrameAPI) => {
+    if (spotifyEmbedController) return;
+
+    const options = {
+      uri: spotifyService.getActivePlaylist().uri,
+      width: '100%',
+      height: '80',
+      theme: '0'
+    };
+
+    IFrameAPI.createController(container, options, (EmbedController) => {
+      spotifyEmbedController = EmbedController;
+      console.log('[Nocturne] Spotify EmbedController connected!');
+
+      EmbedController.addListener('ready', () => {
+        console.log('[Nocturne] Spotify Embed ready for playback');
+        if (pendingSpotifyPlay && isRunning) {
+          EmbedController.play();
+          pendingSpotifyPlay = false;
+        }
+      });
+
+      EmbedController.addListener('playback_update', e => {
+        if (e && e.data) {
+          const isPlaying = !e.data.isPaused;
+          const statusEl = document.getElementById('spotify-dock-status');
+          if (statusEl && isRunning) {
+            statusEl.textContent = isPlaying ? '▶ Playing Bedtime Music' : (isPaused ? '⏸ Paused' : 'Ready');
+          }
+        }
+      });
+
+      if (pendingSpotifyPlay && isRunning) {
+        EmbedController.play();
+        pendingSpotifyPlay = false;
+      }
+    });
+  };
+
+  if (window.SpotifyIframeApi) {
+    mount(window.SpotifyIframeApi);
+  } else {
+    window.onSpotifyIframeApiReady = (IFrameAPI) => {
+      window.SpotifyIframeApi = IFrameAPI;
+      mount(IFrameAPI);
+    };
+  }
+}
+
 // Start the 30-Minute Routine
 async function startRoutine() {
   audioEngine.ensureContext();
@@ -499,16 +670,39 @@ async function startRoutine() {
   audioEngine.speak(`Welcome to tonight's bedtime routine. Starting with ${initialStep.phase.title}. First exercise: ${initialStep.exercise.name}.`, true);
 
   // Background Audio / Spotify
-  if (settings.ambientMode !== 'silence') {
-    audioEngine.startAmbient(settings.ambientMode);
+  if (settings.audioSource === 'spotify') {
+    // 1. Ensure preinstalled ambient sounds NEVER play over Spotify!
+    audioEngine.stopAmbient();
+
+    // 2. Trigger in-app Spotify Iframe Controller
+    if (spotifyEmbedController) {
+      try { 
+        spotifyEmbedController.play(); 
+      } catch (e) {
+        console.warn('Embed play error:', e);
+      }
+    } else {
+      pendingSpotifyPlay = true;
+      const frame = document.querySelector('#spotify-embed-container iframe') || document.getElementById('spotify-embed-frame');
+      if (frame && frame.src && !frame.src.includes('autoplay=1')) {
+        frame.src = `${frame.src}${frame.src.includes('?') ? '&' : '?'}autoplay=1`;
+      }
+    }
+
+    // 3. Trigger Spotify Web API on connected phone / desktop / web player
+    if (spotifyService.isConnected()) {
+      spotifyService.play();
+    }
+  } else if (settings.audioSource === 'ambient') {
+    audioEngine.startAmbient(settings.ambientSound);
+  } else {
+    audioEngine.stopAmbient();
   }
 
-  // Trigger Spotify if user has it configured
-  if (settings.spotifyAutoLaunch) {
-    spotifyService.play();
-  }
-
-  renderApp();
+  // Update UI into active state WITHOUT tearing down the Spotify dock!
+  updateStageUI();
+  updatePhasePills();
+  updateDockState();
   runTimerLoop();
 }
 
@@ -571,7 +765,7 @@ function runTimerLoop() {
   }, 1000);
 }
 
-// Move to next exercise or rest step
+// Move to next exercise or rest step (preserves continuous Spotify audio stream)
 function advanceStep() {
   currentStepIndex++;
 
@@ -592,11 +786,22 @@ function advanceStep() {
     audioEngine.playPhaseGong();
     audioEngine.speak(`Phase complete. Welcome to ${newStep.phase.title}. ${newStep.phase.description}`, true);
 
-    // If mobility or wind-down started, we can optionally switch Spotify playlist to ambient
-    if (newStep.phase.id === 'mobility' && spotifyService.isConnected()) {
-      spotifyService.play(CURATED_PLAYLISTS[1].uri); // Evening acoustic
-    } else if (newStep.phase.id === 'windDown' && spotifyService.isConnected()) {
-      spotifyService.play(CURATED_PLAYLISTS[2].uri); // Deep Sleep ambient
+    // If mobility or wind-down started, smoothly adapt Spotify playlist to matching bedtime vibe
+    if (settings.audioSource === 'spotify') {
+      const nextPlaylist = newStep.phase.id === 'windDown' ? CURATED_PLAYLISTS[2] : (newStep.phase.id === 'mobility' ? CURATED_PLAYLISTS[1] : null);
+      if (nextPlaylist) {
+        if (spotifyEmbedController) {
+          try {
+            spotifyEmbedController.loadUri(nextPlaylist.uri);
+            spotifyEmbedController.play();
+          } catch (_) {}
+        }
+        if (spotifyService.isConnected()) {
+          spotifyService.play(nextPlaylist.uri);
+        }
+        const titleEl = document.getElementById('spotify-dock-title');
+        if (titleEl) titleEl.textContent = nextPlaylist.name;
+      }
     }
   } else {
     if (newStep.isRest) {
@@ -608,7 +813,9 @@ function advanceStep() {
     }
   }
 
-  renderApp();
+  // Update stage and phase badges WITHOUT re-rendering app shell (Spotify keeps playing!)
+  updateStageUI();
+  updatePhasePills();
 }
 
 function skipToNextStep() {
@@ -621,7 +828,8 @@ function goToPreviousStep() {
     const newStep = flattenedSteps[currentStepIndex];
     intervalRemainingSec = newStep.duration;
     currentPhaseIndex = newStep.phaseIndex;
-    renderApp();
+    updateStageUI();
+    updatePhasePills();
   }
 }
 
@@ -629,8 +837,26 @@ function togglePause() {
   isPaused = !isPaused;
   if (isPaused) {
     audioEngine.stopSpeech();
+    if (settings.audioSource === 'spotify') {
+      if (spotifyEmbedController) {
+        try { spotifyEmbedController.pause(); } catch (_) {}
+      }
+      spotifyService.pause();
+    } else if (settings.audioSource === 'ambient') {
+      audioEngine.stopAmbient();
+    }
+  } else {
+    if (settings.audioSource === 'spotify') {
+      if (spotifyEmbedController) {
+        try { spotifyEmbedController.play(); } catch (_) {}
+      }
+      spotifyService.play();
+    } else if (settings.audioSource === 'ambient') {
+      audioEngine.startAmbient(settings.ambientSound);
+    }
   }
   updateStageUI();
+  updateDockState();
 }
 
 function confirmStopRoutine() {
@@ -665,8 +891,14 @@ function stopRoutine() {
   isPaused = false;
   audioEngine.stopAmbient();
   audioEngine.stopSpeech();
+  if (spotifyEmbedController) {
+    try { spotifyEmbedController.pause(); } catch (_) {}
+  }
+  spotifyService.pause();
   wakeLockService.releaseLock();
-  renderApp();
+  updateStageUI();
+  updatePhasePills();
+  updateDockState();
 }
 
 // Routine Completed Celebration!
@@ -864,20 +1096,20 @@ function bindEvents() {
       <div style="background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px;">
         <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px;">Built-in Ambient Soundscape</h4>
         <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px;">
-          Relaxing background sound generator if you prefer no lyrics or want soothing sleep frequencies.
+          Relaxing background sound generator if you prefer pure soothing bedtime frequencies over Spotify.
         </p>
         <div style="display: flex; gap: 8px;">
-          <button class="day-chip ${settings.ambientMode === 'drone' ? 'active' : ''}" id="btn-ambient-drone" style="flex: 1;">
+          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'drone' ? 'active' : ''}" id="btn-ambient-drone" style="flex: 1;">
             <span class="day-chip-name">432Hz Om</span>
             <span class="day-chip-state">Drone</span>
           </button>
-          <button class="day-chip ${settings.ambientMode === 'rain' ? 'active' : ''}" id="btn-ambient-rain" style="flex: 1;">
-            <span class="day-chip-name">Night</span>
-            <span class="day-chip-state">Rain</span>
+          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'rain' ? 'active' : ''}" id="btn-ambient-rain" style="flex: 1;">
+            <span class="day-chip-name">Night Rain</span>
+            <span class="day-chip-state">Rainfall</span>
           </button>
-          <button class="day-chip ${settings.ambientMode === 'silence' ? 'active' : ''}" id="btn-ambient-silent" style="flex: 1;">
-            <span class="day-chip-name">Off</span>
-            <span class="day-chip-state">Silent</span>
+          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'bowls' ? 'active' : ''}" id="btn-ambient-bowls" style="flex: 1;">
+            <span class="day-chip-name">Zen Bowls</span>
+            <span class="day-chip-state">Harmonics</span>
           </button>
         </div>
       </div>
@@ -885,16 +1117,40 @@ function bindEvents() {
 
     openModal(html, 'Bedtime Music & Audio Hub');
 
-    // Playlist Selection (Stays 100% inside Nocturne)
+    // Playlist Selection (seamless in-app update)
     document.querySelectorAll('.spotify-playlist-card').forEach(card => {
       card.addEventListener('click', async () => {
         const uri = card.getAttribute('data-uri');
         spotifyService.setPlaylistUri(uri);
-        if (spotifyService.isConnected()) {
+        const p = spotifyService.getActivePlaylist();
+
+        settings.audioSource = 'spotify';
+        audioEngine.stopAmbient();
+
+        const titleEl = document.getElementById('spotify-dock-title');
+        if (titleEl) titleEl.textContent = p.name;
+
+        if (spotifyEmbedController) {
+          try {
+            spotifyEmbedController.loadUri(uri);
+            if (isRunning && !isPaused) {
+              spotifyEmbedController.play();
+            }
+          } catch (_) {}
+        } else {
+          const frame = document.querySelector('#spotify-embed-container iframe') || document.getElementById('spotify-embed-frame');
+          if (frame) {
+            frame.src = `https://open.spotify.com/embed/playlist/${p.spotifyId}?utm_source=generator&theme=0${isRunning && !isPaused ? '&autoplay=1' : ''}`;
+          }
+        }
+
+        if (spotifyService.isConnected() && isRunning && !isPaused) {
           await spotifyService.play(uri);
         }
+
         closeModal();
-        renderApp();
+        updateDockState();
+        updateStageUI();
       });
     });
 
@@ -918,24 +1174,33 @@ function bindEvents() {
     document.getElementById('btn-spotify-disconnect')?.addEventListener('click', () => {
       spotifyService.disconnect();
       closeModal();
-      renderApp();
+      updateDockState();
+      updateStageUI();
     });
 
     // Ambient Buttons
-    ['drone', 'rain', 'silence'].forEach(mode => {
-      document.getElementById(`btn-ambient-${mode}`)?.addEventListener('click', () => {
-        settings.ambientMode = mode;
-        audioEngine.ambientMode = mode;
-        if (isRunning) {
-          audioEngine.startAmbient(mode);
+    ['drone', 'rain', 'bowls'].forEach(soundType => {
+      document.getElementById(`btn-ambient-${soundType}`)?.addEventListener('click', () => {
+        settings.audioSource = 'ambient';
+        settings.ambientSound = soundType;
+        if (spotifyEmbedController) {
+          try { spotifyEmbedController.pause(); } catch (_) {}
+        }
+        spotifyService.pause();
+        if (isRunning && !isPaused) {
+          audioEngine.startAmbient(soundType);
         }
         closeModal();
+        updateDockState();
+        updateStageUI();
       });
     });
   };
 
   document.getElementById('btn-spotify-hub')?.addEventListener('click', openMusicHub);
   document.getElementById('btn-music-selector')?.addEventListener('click', openMusicHub);
+  document.getElementById('btn-dock-change-playlist')?.addEventListener('click', openMusicHub);
+  document.getElementById('btn-dock-play-pause')?.addEventListener('click', togglePause);
 
   // Install & Sideload Guide Modal
   document.getElementById('btn-install-guide')?.addEventListener('click', async () => {

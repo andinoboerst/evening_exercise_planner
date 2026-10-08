@@ -225,8 +225,8 @@ class AudioEngine {
           this.ambientSourceNodes.push(osc);
         });
       } else if (mode === 'rain') {
-        // Pink / soft night rain generator
-        const bufferSize = ctx.sampleRate * 2;
+        // Lush Night Rain generator: pink noise filtered with seamless loop fade
+        const bufferSize = ctx.sampleRate * 4;
         const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const output = noiseBuffer.getChannelData(0);
         let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
@@ -238,22 +238,53 @@ class AudioEngine {
           b3 = 0.86650 * b3 + white * 0.3104856;
           b4 = 0.55000 * b4 + white * 0.5329522;
           b5 = -0.7616 * b5 - white * 0.0168980;
-          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.04;
+          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.45; // Audible, calming rain volume
           b6 = white * 0.115926;
         }
 
-        const whiteNoise = ctx.createBufferSource();
-        whiteNoise.buffer = noiseBuffer;
-        whiteNoise.loop = true;
+        // Seamless loop crossfade (prevent any pop/click at loop boundary)
+        const fadeSamples = 2400;
+        for (let i = 0; i < fadeSamples; i++) {
+          const factor = i / fadeSamples;
+          output[i] *= factor;
+          output[bufferSize - 1 - i] *= factor;
+        }
 
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(900, ctx.currentTime);
+        const rainSource = ctx.createBufferSource();
+        rainSource.buffer = noiseBuffer;
+        rainSource.loop = true;
 
-        whiteNoise.connect(filter);
-        filter.connect(this.ambientGain);
-        whiteNoise.start();
-        this.ambientSourceNodes.push(whiteNoise);
+        const rainFilter = ctx.createBiquadFilter();
+        rainFilter.type = 'lowpass';
+        rainFilter.frequency.setValueAtTime(1200, ctx.currentTime);
+
+        rainSource.connect(rainFilter);
+        rainFilter.connect(this.ambientGain);
+        rainSource.start();
+        this.ambientSourceNodes.push(rainSource);
+
+      } else if (mode === 'bowls') {
+        // Harmonic Tibetan singing bowl drone
+        const bowlFreqs = [216, 288, 432, 576];
+        bowlFreqs.forEach(freq => {
+          const osc = ctx.createOscillator();
+          const filter = ctx.createBiquadFilter();
+          const oscGain = ctx.createGain();
+          oscGain.gain.setValueAtTime(0.25, ctx.currentTime);
+
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(freq, ctx.currentTime);
+          filter.Q.setValueAtTime(2.5, ctx.currentTime);
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+          osc.connect(filter);
+          filter.connect(oscGain);
+          oscGain.connect(this.ambientGain);
+          osc.start();
+          this.ambientSourceNodes.push(osc);
+        });
       }
 
       this.ambientPlaying = true;
