@@ -1,0 +1,14 @@
+{
+  "appId": "com.eveningexercise.planner",
+  "appName": "Nocturne Evening Exercise",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#090d16"
+    }
+  }
+}
