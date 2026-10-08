@@ -279,6 +279,32 @@ function updateStageUI() {
           </div>
         </div>
 
+        <!-- In-App Spotify Bedtime Soundtrack Box -->
+        <div class="spotify-inapp-player-card">
+          <div class="spotify-inapp-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.15rem;">🎧</span>
+              <div>
+                <span class="spotify-inapp-title">${spotifyService.getActivePlaylist().name}</span>
+                <span class="spotify-inapp-sub">${spotifyService.isConnected() ? 'Spotify Connected • Background Auto-Play' : 'In-App Bedtime Soundtrack'}</span>
+              </div>
+            </div>
+            <button id="btn-quick-change-playlist" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;">
+              Change
+            </button>
+          </div>
+          <iframe 
+            id="spotify-embed-frame"
+            style="border-radius: 12px; border: none; margin-top: 8px;"
+            src="https://open.spotify.com/embed/playlist/${spotifyService.getActivePlaylistId()}?utm_source=generator&theme=0" 
+            width="100%" 
+            height="80" 
+            frameBorder="0" 
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+            loading="lazy"
+          ></iframe>
+        </div>
+
         <button id="btn-start-routine" class="btn-primary-start">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -304,6 +330,7 @@ function updateStageUI() {
     `;
 
     document.getElementById('btn-start-routine').addEventListener('click', startRoutine);
+    document.getElementById('btn-quick-change-playlist')?.addEventListener('click', openMusicHub);
 
     // Phase toggle handlers
     const handlePhaseToggle = (phaseKey) => {
@@ -858,13 +885,16 @@ function bindEvents() {
 
     openModal(html, 'Bedtime Music & Audio Hub');
 
-    // Playlist Selection
+    // Playlist Selection (Stays 100% inside Nocturne)
     document.querySelectorAll('.spotify-playlist-card').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', async () => {
         const uri = card.getAttribute('data-uri');
         spotifyService.setPlaylistUri(uri);
-        spotifyService.launchSpotifyApp(uri);
+        if (spotifyService.isConnected()) {
+          await spotifyService.play(uri);
+        }
         closeModal();
+        renderApp();
       });
     });
 
