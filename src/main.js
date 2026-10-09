@@ -51,6 +51,13 @@ let settings = {
 let spotifyEmbedController = null;
 let pendingSpotifyPlay = false;
 
+// Audio Ducking: automatically lower Spotify background music when voice coach speaks
+audioEngine.onDuck = (isDucking) => {
+  if (settings.audioSource === 'spotify') {
+    spotifyService.duck(isDucking);
+  }
+};
+
 // Flattened steps calculation for exact timeline
 function buildFlattenedSteps(routine) {
   const steps = [];
@@ -193,7 +200,7 @@ function renderApp() {
           <div>
             <span class="spotify-inapp-title" id="spotify-dock-title">${spotifyService.getActivePlaylist().name}</span>
             <span class="spotify-inapp-sub" id="spotify-dock-status">
-              ${isRunning ? '▶ Playing Bedtime Music' : (spotifyService.isConnected() ? 'Spotify Connected • Auto-Plays on Start' : 'In-App Player • Auto-Plays on Start')}
+              ${isRunning ? '▶ Playing Bedtime Music • Auto-Ducking on voice' : (spotifyService.isConnected() ? 'Spotify Connected • Plays on Start' : 'In-App Player • Plays on Start')}
             </span>
           </div>
         </div>
@@ -201,6 +208,9 @@ function renderApp() {
           <button id="btn-dock-play-pause" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; display: ${isRunning ? 'inline-flex' : 'none'};">
             ${isPaused ? '▶ Resume' : '⏸ Pause'}
           </button>
+          <a id="btn-dock-open-app" href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; color: var(--spotify-green);" title="Play full songs directly in your Spotify app">
+            Spotify App ↗
+          </a>
           <button id="btn-dock-change-playlist" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;">
             Change
           </button>
@@ -581,7 +591,7 @@ function updateDockState() {
   const statusEl = document.getElementById('spotify-dock-status');
   if (statusEl) {
     if (isRunning) {
-      statusEl.textContent = isPaused ? '⏸ Paused' : '▶ Playing Bedtime Music';
+      statusEl.textContent = isPaused ? '⏸ Paused' : '▶ Playing Bedtime Music • Auto-Ducking on voice';
     } else {
       statusEl.textContent = spotifyService.isConnected() 
         ? 'Spotify Connected • Auto-Plays on Start' 
@@ -593,6 +603,11 @@ function updateDockState() {
   if (btnPause) {
     btnPause.style.display = isRunning ? 'inline-flex' : 'none';
     btnPause.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+  }
+
+  const btnOpenApp = document.getElementById('btn-dock-open-app');
+  if (btnOpenApp) {
+    btnOpenApp.href = spotifyService.getActivePlaylist().uri;
   }
 }
 
@@ -1047,10 +1062,31 @@ function bindEvents() {
         `).join('')}
       </div>
 
+      <div style="background: rgba(29, 185, 84, 0.08); border: 1px solid rgba(29, 185, 84, 0.3); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+        <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+          <span>💡 Full Song Playback vs 30s Previews</span>
+        </h4>
+        <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px; line-height: 1.45;">
+          Spotify's web embed player requires your browser to be logged into <strong>open.spotify.com</strong>. Without a browser cookie, Spotify limits embeds to 30-second previews.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
+          <a href="https://open.spotify.com" target="_blank" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.8rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); text-decoration: none; justify-content: center;">
+            🌐 1. Log In at open.spotify.com (Unlocks Full Web Songs) ↗
+          </a>
+          <a href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.8rem; background: var(--spotify-green); color: #000; font-weight: 700; text-decoration: none; justify-content: center;">
+            📱 2. Play Directly in Spotify App (Full Songs & Background) ↗
+          </a>
+        </div>
+        <p style="font-size: 0.72rem; color: #94a3b8; line-height: 1.35;">
+          Once logged in at open.spotify.com or playing via the Spotify app, you'll hear uninterrupted full music throughout your workout!
+        </p>
+      </div>
+
       <div style="background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
-        <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px;">Spotify Connect & Auto-Play</h4>
+        <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px;">Spotify Connect & Developer API</h4>
         <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px;">
-          ${isConnected ? '✅ Connected to Spotify account' : 'Get your Client ID from the Spotify Developer Dashboard for hands-free music control:'}
+          ${isConnected ? '✅ Connected to Spotify Developer Account' : 'Connect your Spotify account to enable remote control & automatic audio ducking:'}
         </p>
 
         <div style="background: #05070d; border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px; font-size: 0.75rem; color: #94a3b8; line-height: 1.45;">
@@ -1058,11 +1094,7 @@ function bindEvents() {
             1. Go to: <a href="https://developer.spotify.com/dashboard" target="_blank" style="color: var(--spotify-green); font-weight: 600; text-decoration: underline;">developer.spotify.com/dashboard</a>
           </div>
           <div style="margin-bottom: 4px;">
-            2. In <strong>Redirect URIs</strong>, enter:
-            <div style="font-family: monospace; color: #a5b4fc; background: rgba(255,255,255,0.04); padding: 4px 6px; border-radius: 4px; margin-top: 3px;">
-              http://localhost:5173/
-            </div>
-            <span style="font-size: 0.7rem; color: #64748b;">(Spotify only allows http:// for localhost; all other URLs require https://)</span>
+            2. In <strong>Redirect URIs</strong>, enter your app URL (e.g. your Vercel URL or http://localhost:5173/)
           </div>
           <div>
             3. Copy the <strong>Client ID</strong> and paste below:

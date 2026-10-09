@@ -371,6 +371,29 @@ class SpotifyService {
       console.warn('Spotify pause error:', e);
     }
   }
+
+  // Audio Ducking: lowers music during voice coach instructions
+  async setVolume(percent) {
+    if (!this.token) return;
+    const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+    try {
+      if (this.player) {
+        try { await this.player.setVolume(clamped / 100); } catch (_) {}
+      }
+      await fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${clamped}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${this.token}` }
+      });
+    } catch (e) {
+      console.warn('Spotify setVolume error:', e);
+    }
+  }
+
+  async duck(isDucking) {
+    // When coach speaks, duck to 20%, when finished restore to 80%
+    const target = isDucking ? 20 : 80;
+    await this.setVolume(target);
+  }
 }
 
 export const spotifyService = new SpotifyService();

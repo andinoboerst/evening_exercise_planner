@@ -159,6 +159,27 @@ class AudioEngine {
     }
   }
 
+  // --- Audio Ducking (lowers background music/ambient during speech) ---
+  duck(isDucking) {
+    if (this.ambientGain && this.ctx && this.ambientPlaying) {
+      const now = this.ctx.currentTime;
+      try {
+        if (isDucking) {
+          this.ambientGain.gain.cancelScheduledValues(now);
+          this.ambientGain.gain.setValueAtTime(Math.max(0.001, this.ambientGain.gain.value), now);
+          this.ambientGain.gain.exponentialRampToValueAtTime(0.015, now + 0.25);
+        } else {
+          this.ambientGain.gain.cancelScheduledValues(now);
+          this.ambientGain.gain.setValueAtTime(Math.max(0.001, this.ambientGain.gain.value), now);
+          this.ambientGain.gain.exponentialRampToValueAtTime(0.12, now + 0.6);
+        }
+      } catch (_) {}
+    }
+    if (typeof this.onDuck === 'function') {
+      try { this.onDuck(isDucking); } catch (_) {}
+    }
+  }
+
   // --- Voice Guidance ---
   speak(text, priority = false) {
     if (!this.voiceEnabled || !('speechSynthesis' in window)) return;
@@ -172,10 +193,22 @@ class AudioEngine {
       }
       utterance.rate = 0.95; // Slightly slower, calm bedtime pace
       utterance.pitch = 1.0;
-      utterance.volume = 0.9;
+      utterance.volume = 1.0; // Clear full volume
+
+      utterance.onstart = () => {
+        this.duck(true);
+      };
+      utterance.onend = () => {
+        this.duck(false);
+      };
+      utterance.onerror = () => {
+        this.duck(false);
+      };
+
       window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.warn('Speech synthesis error:', e);
+      this.duck(false);
     }
   }
 
@@ -183,6 +216,7 @@ class AudioEngine {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
+    this.duck(false);
   }
 
   // --- Ambient Background Soundscape ---
