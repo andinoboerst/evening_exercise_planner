@@ -3,6 +3,7 @@ import { WEEKLY_ROUTINES, getRoutineForDay } from './data/routines.js';
 import { audioEngine } from './audio/audioEngine.js';
 import { spotifyService, CURATED_PLAYLISTS } from './services/spotify.js';
 import { wakeLockService } from './services/wakeLock.js';
+import { getPoseImage } from './utils/poseImages.js';
 import confetti from 'canvas-confetti';
 import QRCode from 'qrcode';
 
@@ -44,16 +45,19 @@ function getEnabledDurationMin() {
 let settings = {
   voiceEnabled: true,
   soundEffectsEnabled: true,
-  audioSource: 'spotify', // 'spotify' (default!), 'ambient', 'silent'
-  ambientSound: 'drone'   // 'drone', 'rain', 'bowls'
+  audioSource: 'spotify-app', // 'spotify-app' (default!), 'ambient', 'spotify-embed', 'silent'
+  ambientSound: 'drone'       // 'drone', 'rain', 'bowls'
 };
+
+const isSpotifyApp = () => settings.audioSource === 'spotify-app' || settings.audioSource === 'spotify';
+const isSpotifyEmbed = () => settings.audioSource === 'spotify-embed';
 
 let spotifyEmbedController = null;
 let pendingSpotifyPlay = false;
 
 // Audio Ducking: automatically lower Spotify background music when voice coach speaks
 audioEngine.onDuck = (isDucking) => {
-  if (settings.audioSource === 'spotify') {
+  if (isSpotifyApp() || isSpotifyEmbed()) {
     spotifyService.duck(isDucking);
   }
 };
@@ -335,21 +339,43 @@ function updateStageUI() {
             Bedtime Audio Mode:
           </div>
           <div class="audio-source-strip">
-            <button class="audio-tab-btn spotify-tab ${settings.audioSource === 'spotify' ? 'active' : ''}" id="tab-src-spotify">
-              <span>🟢 Spotify Music</span>
+            <button class="audio-tab-btn spotify-tab ${isSpotifyApp() ? 'active' : ''}" id="tab-src-spotify-app">
+              <span>📱 Spotify App</span>
             </button>
             <button class="audio-tab-btn ${settings.audioSource === 'ambient' ? 'active' : ''}" id="tab-src-ambient">
-              <span>🟣 Ambient Sounds</span>
+              <span>🟣 Ambient</span>
+            </button>
+            <button class="audio-tab-btn ${isSpotifyEmbed() ? 'active' : ''}" id="tab-src-spotify-embed">
+              <span>🌐 Web Mini</span>
             </button>
             <button class="audio-tab-btn ${settings.audioSource === 'silent' ? 'active' : ''}" id="tab-src-silent">
-              <span>⚪ Timer Only</span>
+              <span>⚪ Silent</span>
             </button>
           </div>
         </div>
 
+        ${isSpotifyApp() ? `
+          <div class="spotify-mode-guide">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
+              <div style="font-size: 0.82rem; font-weight: 700; color: #fff;">
+                📱 Full Songs via Spotify App
+              </div>
+              <a href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="btn-open-spotify-inline">
+                Open in Spotify & Play ↗
+              </a>
+            </div>
+            <p style="font-size: 0.76rem; color: #cbd5e1; line-height: 1.4; margin: 0;">
+              Tap <strong>Open in Spotify & Play</strong>, hit play in Spotify, then return here and tap <strong>START ROUTINE</strong>. Spotify keeps playing uninterrupted in the background!
+            </p>
+          </div>
+        ` : ''}
+
         ${settings.audioSource === 'ambient' ? `
           <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 18px;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: #c4b5fd; margin-bottom: 8px;">Select Ambient Soundscape:</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #c4b5fd;">Select Ambient Soundscape:</span>
+              <span style="font-size: 0.7rem; color: #a5b4fc; background: rgba(139,92,246,0.2); padding: 2px 6px; border-radius: 4px;">Ducks during voice</span>
+            </div>
             <div style="display: flex; gap: 6px;">
               <button class="day-chip ${settings.ambientSound === 'drone' ? 'active' : ''}" id="btn-amb-choice-drone" style="flex: 1; padding: 8px 4px;">
                 <span class="day-chip-name">432Hz Om</span>
@@ -364,6 +390,12 @@ function updateStageUI() {
                 <span class="day-chip-state" style="font-size: 0.74rem;">Harmonics</span>
               </button>
             </div>
+          </div>
+        ` : ''}
+
+        ${isSpotifyEmbed() ? `
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 16px; font-size: 0.75rem; color: #94a3b8; line-height: 1.4;">
+            🌐 In-browser mini player. Note: Spotify limits web embeds to 30-second clips unless your browser has cookies on open.spotify.com. For full songs on phone, use <strong>📱 Spotify App</strong> mode!
           </div>
         ` : ''}
 
@@ -390,9 +422,12 @@ function updateStageUI() {
     document.getElementById('btn-start-routine').addEventListener('click', startRoutine);
 
     // Audio source tab listeners (seamless, without wiping the page)
-    document.getElementById('tab-src-spotify')?.addEventListener('click', () => {
-      settings.audioSource = 'spotify';
+    document.getElementById('tab-src-spotify-app')?.addEventListener('click', () => {
+      settings.audioSource = 'spotify-app';
       audioEngine.stopAmbient();
+      if (spotifyEmbedController) {
+        try { spotifyEmbedController.pause(); } catch (_) {}
+      }
       updateDockState();
       updateStageUI();
     });
@@ -402,6 +437,12 @@ function updateStageUI() {
         try { spotifyEmbedController.pause(); } catch (_) {}
       }
       spotifyService.pause();
+      updateDockState();
+      updateStageUI();
+    });
+    document.getElementById('tab-src-spotify-embed')?.addEventListener('click', () => {
+      settings.audioSource = 'spotify-embed';
+      audioEngine.stopAmbient();
       updateDockState();
       updateStageUI();
     });
@@ -504,6 +545,18 @@ function updateStageUI() {
           </div>
         </div>
 
+        <!-- High-Quality Visual Pose Illustration -->
+        <div class="exercise-pose-container">
+          <img 
+            src="${currentStep.isRest && nextStep?.exercise ? getPoseImage(nextStep.exercise) : getPoseImage(currentEx)}" 
+            alt="${currentEx.name}" 
+            class="exercise-pose-img"
+          />
+          <div class="exercise-pose-overlay">
+            <span class="exercise-pose-tag">${currentStep.isRest ? `Up Next: ${nextStep?.exercise?.name || 'Complete'}` : currentEx.name}</span>
+          </div>
+        </div>
+
         <!-- Exercise Details -->
         <div class="current-exercise-details">
           <h2 class="exercise-name">${currentStep.isRest ? `Rest (Next: ${nextStep?.exercise?.name || 'Done'})` : currentEx.name}</h2>
@@ -580,7 +633,7 @@ function updateDockState() {
   const dock = document.getElementById('spotify-player-dock');
   if (!dock) return;
 
-  if (settings.audioSource === 'spotify') {
+  if (isSpotifyApp() || isSpotifyEmbed()) {
     dock.classList.remove('hidden');
     dock.style.display = 'block';
   } else {
@@ -588,20 +641,27 @@ function updateDockState() {
     dock.style.display = 'none';
   }
 
+  const embedContainer = document.getElementById('spotify-embed-container');
+  if (embedContainer) {
+    embedContainer.style.display = isSpotifyEmbed() ? 'block' : 'none';
+  }
+
   const statusEl = document.getElementById('spotify-dock-status');
   if (statusEl) {
-    if (isRunning) {
-      statusEl.textContent = isPaused ? '⏸ Paused' : '▶ Playing Bedtime Music • Auto-Ducking on voice';
+    if (isSpotifyApp()) {
+      statusEl.textContent = isRunning 
+        ? (isPaused ? '⏸ Routine Paused • Spotify in Background' : '📱 Routine Active • Spotify Playing in Background')
+        : '📱 Spotify App Mode • Full Songs via Background App';
     } else {
-      statusEl.textContent = spotifyService.isConnected() 
-        ? 'Spotify Connected • Auto-Plays on Start' 
-        : 'In-App Player • Auto-Plays on Start';
+      statusEl.textContent = isRunning 
+        ? (isPaused ? '⏸ Paused' : '▶ Playing In-Browser Bedtime Music') 
+        : 'In-Browser Player Ready';
     }
   }
 
   const btnPause = document.getElementById('btn-dock-play-pause');
   if (btnPause) {
-    btnPause.style.display = isRunning ? 'inline-flex' : 'none';
+    btnPause.style.display = (isRunning && isSpotifyEmbed()) ? 'inline-flex' : 'none';
     btnPause.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
   }
 
@@ -632,7 +692,7 @@ function initSpotifyEmbedController() {
 
       EmbedController.addListener('ready', () => {
         console.log('[Nocturne] Spotify Embed ready for playback');
-        if (pendingSpotifyPlay && isRunning) {
+        if (pendingSpotifyPlay && isRunning && isSpotifyEmbed()) {
           EmbedController.play();
           pendingSpotifyPlay = false;
         }
@@ -648,7 +708,7 @@ function initSpotifyEmbedController() {
         }
       });
 
-      if (pendingSpotifyPlay && isRunning) {
+      if (pendingSpotifyPlay && isRunning && isSpotifyEmbed()) {
         EmbedController.play();
         pendingSpotifyPlay = false;
       }
@@ -685,11 +745,16 @@ async function startRoutine() {
   audioEngine.speak(`Welcome to tonight's bedtime routine. Starting with ${initialStep.phase.title}. First exercise: ${initialStep.exercise.name}.`, true);
 
   // Background Audio / Spotify
-  if (settings.audioSource === 'spotify') {
-    // 1. Ensure preinstalled ambient sounds NEVER play over Spotify!
+  if (isSpotifyApp()) {
+    // 1. Spotify App Mode (Background Audio)
+    // Never trigger the 30s preview iframe! Leave background Spotify app playing full songs!
     audioEngine.stopAmbient();
-
-    // 2. Trigger in-app Spotify Iframe Controller
+    if (spotifyService.isConnected()) {
+      spotifyService.play();
+    }
+  } else if (isSpotifyEmbed()) {
+    // 2. Trigger in-app Spotify Iframe Controller (only in Web Mini player mode)
+    audioEngine.stopAmbient();
     if (spotifyEmbedController) {
       try { 
         spotifyEmbedController.play(); 
@@ -704,7 +769,6 @@ async function startRoutine() {
       }
     }
 
-    // 3. Trigger Spotify Web API on connected phone / desktop / web player
     if (spotifyService.isConnected()) {
       spotifyService.play();
     }
@@ -802,10 +866,10 @@ function advanceStep() {
     audioEngine.speak(`Phase complete. Welcome to ${newStep.phase.title}. ${newStep.phase.description}`, true);
 
     // If mobility or wind-down started, smoothly adapt Spotify playlist to matching bedtime vibe
-    if (settings.audioSource === 'spotify') {
+    if (isSpotifyApp() || isSpotifyEmbed()) {
       const nextPlaylist = newStep.phase.id === 'windDown' ? CURATED_PLAYLISTS[2] : (newStep.phase.id === 'mobility' ? CURATED_PLAYLISTS[1] : null);
       if (nextPlaylist) {
-        if (spotifyEmbedController) {
+        if (isSpotifyEmbed() && spotifyEmbedController) {
           try {
             spotifyEmbedController.loadUri(nextPlaylist.uri);
             spotifyEmbedController.play();
@@ -852,21 +916,23 @@ function togglePause() {
   isPaused = !isPaused;
   if (isPaused) {
     audioEngine.stopSpeech();
-    if (settings.audioSource === 'spotify') {
-      if (spotifyEmbedController) {
-        try { spotifyEmbedController.pause(); } catch (_) {}
-      }
+    if (isSpotifyEmbed() && spotifyEmbedController) {
+      try { spotifyEmbedController.pause(); } catch (_) {}
+    }
+    if (spotifyService.isConnected()) {
       spotifyService.pause();
-    } else if (settings.audioSource === 'ambient') {
+    }
+    if (settings.audioSource === 'ambient') {
       audioEngine.stopAmbient();
     }
   } else {
-    if (settings.audioSource === 'spotify') {
-      if (spotifyEmbedController) {
-        try { spotifyEmbedController.play(); } catch (_) {}
-      }
+    if (isSpotifyEmbed() && spotifyEmbedController) {
+      try { spotifyEmbedController.play(); } catch (_) {}
+    }
+    if (spotifyService.isConnected()) {
       spotifyService.play();
-    } else if (settings.audioSource === 'ambient') {
+    }
+    if (settings.audioSource === 'ambient') {
       audioEngine.startAmbient(settings.ambientSound);
     }
   }
@@ -1023,16 +1089,22 @@ function bindEvents() {
           <span>${phase.title}</span>
           <span style="font-size: 0.72rem; color: var(--text-dim);">(${Math.round(phase.durationSec / 60)} min)</span>
         </div>
-        ${phase.exercises.map(ex => `
-          <div class="exercise-list-item">
-            <div class="exercise-list-item-header">
-              <span class="exercise-list-item-title">${ex.name}</span>
-              <span class="exercise-list-item-duration">${ex.duration}s hold ${ex.rest ? `+ ${ex.rest}s rest` : ''}</span>
+        ${phase.exercises.map(ex => {
+          const poseImg = getPoseImage(ex);
+          return `
+          <div class="exercise-list-item-with-thumb">
+            <img src="${poseImg}" alt="${ex.name}" class="exercise-thumb" loading="lazy" />
+            <div class="exercise-list-item-body">
+              <div class="exercise-list-item-header">
+                <span class="exercise-list-item-title">${ex.name}</span>
+                <span class="exercise-list-item-duration">${ex.duration}s hold ${ex.rest ? `+ ${ex.rest}s rest` : ''}</span>
+              </div>
+              <p class="exercise-list-item-desc">${ex.instructions}</p>
+              <p class="exercise-list-item-partner"><strong>Partner:</strong> ${ex.partnerTip}</p>
             </div>
-            <p class="exercise-list-item-desc">${ex.instructions}</p>
-            <p class="exercise-list-item-partner"><strong>Partner:</strong> ${ex.partnerTip}</p>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
     `).join('');
 
@@ -1044,49 +1116,75 @@ function bindEvents() {
     const isConnected = spotifyService.isConnected();
     const html = `
       <div style="margin-bottom: 20px;">
-        <h4 style="font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 8px;">Curated Playlists</h4>
+        <h4 style="font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 8px;">Curated Bedtime Playlists</h4>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
-          Tap any playlist to open directly in Spotify or use with the auto-player.
+          Tap any playlist to select it. For uninterrupted full tracks, tap <strong>Open in App ↗</strong> to play directly in Spotify on your phone!
         </p>
 
         ${CURATED_PLAYLISTS.map(p => `
           <div class="spotify-playlist-card ${spotifyService.activePlaylistUri === p.uri ? 'selected' : ''}" data-uri="${p.uri}">
-            <div>
+            <div style="flex: 1; min-width: 0;">
               <div class="spotify-playlist-name">${p.name}</div>
               <div class="spotify-playlist-desc">${p.description}</div>
             </div>
-            <span style="font-size: 0.75rem; font-weight: 600; color: var(--spotify-green); border: 1px solid rgba(29, 185, 84, 0.4); padding: 4px 8px; border-radius: 999px;">
-              ${p.tag}
-            </span>
+            <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+              <a href="${p.uri}" target="_blank" class="btn-open-spotify-inline" style="padding: 5px 10px; font-size: 0.72rem;">
+                Open App ↗
+              </a>
+              <span style="font-size: 0.75rem; font-weight: 600; color: var(--spotify-green); border: 1px solid rgba(29, 185, 84, 0.4); padding: 4px 8px; border-radius: 999px;">
+                ${p.tag}
+              </span>
+            </div>
           </div>
         `).join('')}
       </div>
 
       <div style="background: rgba(29, 185, 84, 0.08); border: 1px solid rgba(29, 185, 84, 0.3); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
         <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-          <span>💡 Full Song Playback vs 30s Previews</span>
+          <span>📱 Mode 1: Spotify App (Recommended for Full Songs)</span>
         </h4>
         <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px; line-height: 1.45;">
-          Spotify's web embed player requires your browser to be logged into <strong>open.spotify.com</strong>. Without a browser cookie, Spotify limits embeds to 30-second previews.
+          To listen to full songs without 30-second previews and with automatic mobile system ducking:
         </p>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
-          <a href="https://open.spotify.com" target="_blank" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.8rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); text-decoration: none; justify-content: center;">
-            🌐 1. Log In at open.spotify.com (Unlocks Full Web Songs) ↗
+          <a href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.82rem; background: var(--spotify-green); color: #000; font-weight: 700; text-decoration: none; justify-content: center;">
+            📱 1. Open Active Playlist in Spotify App & Press Play ↗
           </a>
-          <a href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.8rem; background: var(--spotify-green); color: #000; font-weight: 700; text-decoration: none; justify-content: center;">
-            📱 2. Play Directly in Spotify App (Full Songs & Background) ↗
-          </a>
+          <button id="btn-select-app-mode" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.8rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); justify-content: center;">
+            ✓ 2. Set Spotify App Mode (Background Audio)
+          </button>
         </div>
         <p style="font-size: 0.72rem; color: #94a3b8; line-height: 1.35;">
-          Once logged in at open.spotify.com or playing via the Spotify app, you'll hear uninterrupted full music throughout your workout!
+          Nocturne will NOT play any 30s preview iframe over your music. You'll hear your full Spotify songs in the background, and your phone will automatically duck the music during coaching cues!
         </p>
       </div>
 
       <div style="background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
-        <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px;">Spotify Connect & Developer API</h4>
+        <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px;">🟣 Mode 2: Built-in Ambient Soundscapes (Auto-Ducked)</h4>
         <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px;">
-          ${isConnected ? '✅ Connected to Spotify Developer Account' : 'Connect your Spotify account to enable remote control & automatic audio ducking:'}
+          Free procedural bedtime frequencies generated directly in-app. Volume drops to 15% during voice commands.
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'drone' ? 'active' : ''}" id="btn-ambient-drone" style="flex: 1;">
+            <span class="day-chip-name">432Hz Om</span>
+            <span class="day-chip-state">Drone</span>
+          </button>
+          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'rain' ? 'active' : ''}" id="btn-ambient-rain" style="flex: 1;">
+            <span class="day-chip-name">Night Rain</span>
+            <span class="day-chip-state">Rainfall</span>
+          </button>
+          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'bowls' ? 'active' : ''}" id="btn-ambient-bowls" style="flex: 1;">
+            <span class="day-chip-name">Zen Bowls</span>
+            <span class="day-chip-state">Harmonics</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+        <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px;">🌐 Mode 3: In-Browser Player & Spotify API</h4>
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px;">
+          ${isConnected ? '✅ Connected to Spotify Account' : 'Connect via Spotify Web API (Requires Spotify Developer Client ID):'}
         </p>
 
         <div style="background: #05070d; border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px; font-size: 0.75rem; color: #94a3b8; line-height: 1.45;">
@@ -1094,10 +1192,10 @@ function bindEvents() {
             1. Go to: <a href="https://developer.spotify.com/dashboard" target="_blank" style="color: var(--spotify-green); font-weight: 600; text-decoration: underline;">developer.spotify.com/dashboard</a>
           </div>
           <div style="margin-bottom: 4px;">
-            2. In <strong>Redirect URIs</strong>, enter your app URL (e.g. your Vercel URL or http://localhost:5173/)
+            2. In <strong>Redirect URIs</strong>, enter your current website URL (e.g. your Vercel URL)
           </div>
           <div>
-            3. Copy the <strong>Client ID</strong> and paste below:
+            3. Paste your <strong>Client ID</strong> below and tap Log in:
           </div>
         </div>
         
@@ -1124,55 +1222,46 @@ function bindEvents() {
           `}
         </div>
       </div>
-
-      <div style="background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px;">
-        <h4 style="font-size: 0.92rem; font-weight: 700; color: #fff; margin-bottom: 6px;">Built-in Ambient Soundscape</h4>
-        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px;">
-          Relaxing background sound generator if you prefer pure soothing bedtime frequencies over Spotify.
-        </p>
-        <div style="display: flex; gap: 8px;">
-          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'drone' ? 'active' : ''}" id="btn-ambient-drone" style="flex: 1;">
-            <span class="day-chip-name">432Hz Om</span>
-            <span class="day-chip-state">Drone</span>
-          </button>
-          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'rain' ? 'active' : ''}" id="btn-ambient-rain" style="flex: 1;">
-            <span class="day-chip-name">Night Rain</span>
-            <span class="day-chip-state">Rainfall</span>
-          </button>
-          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'bowls' ? 'active' : ''}" id="btn-ambient-bowls" style="flex: 1;">
-            <span class="day-chip-name">Zen Bowls</span>
-            <span class="day-chip-state">Harmonics</span>
-          </button>
-        </div>
-      </div>
     `;
 
     openModal(html, 'Bedtime Music & Audio Hub');
 
+    // Button to set Spotify App Mode
+    document.getElementById('btn-select-app-mode')?.addEventListener('click', () => {
+      settings.audioSource = 'spotify-app';
+      audioEngine.stopAmbient();
+      if (spotifyEmbedController) {
+        try { spotifyEmbedController.pause(); } catch (_) {}
+      }
+      closeModal();
+      updateDockState();
+      updateStageUI();
+    });
+
     // Playlist Selection (seamless in-app update)
     document.querySelectorAll('.spotify-playlist-card').forEach(card => {
-      card.addEventListener('click', async () => {
+      card.addEventListener('click', async (e) => {
+        if (e.target.closest('a')) return; // Allow direct link to open
         const uri = card.getAttribute('data-uri');
         spotifyService.setPlaylistUri(uri);
         const p = spotifyService.getActivePlaylist();
 
-        settings.audioSource = 'spotify';
-        audioEngine.stopAmbient();
-
         const titleEl = document.getElementById('spotify-dock-title');
         if (titleEl) titleEl.textContent = p.name;
 
-        if (spotifyEmbedController) {
-          try {
-            spotifyEmbedController.loadUri(uri);
-            if (isRunning && !isPaused) {
-              spotifyEmbedController.play();
+        if (isSpotifyEmbed()) {
+          if (spotifyEmbedController) {
+            try {
+              spotifyEmbedController.loadUri(uri);
+              if (isRunning && !isPaused) {
+                spotifyEmbedController.play();
+              }
+            } catch (_) {}
+          } else {
+            const frame = document.querySelector('#spotify-embed-container iframe') || document.getElementById('spotify-embed-frame');
+            if (frame) {
+              frame.src = `https://open.spotify.com/embed/playlist/${p.spotifyId}?utm_source=generator&theme=0${isRunning && !isPaused ? '&autoplay=1' : ''}`;
             }
-          } catch (_) {}
-        } else {
-          const frame = document.querySelector('#spotify-embed-container iframe') || document.getElementById('spotify-embed-frame');
-          if (frame) {
-            frame.src = `https://open.spotify.com/embed/playlist/${p.spotifyId}?utm_source=generator&theme=0${isRunning && !isPaused ? '&autoplay=1' : ''}`;
           }
         }
 
@@ -1193,12 +1282,22 @@ function bindEvents() {
       alert('Spotify Client ID saved!');
     });
 
-    // Spotify Login
+    // Spotify Login with automatic input capture and friendly fallback
     document.getElementById('btn-spotify-login')?.addEventListener('click', async () => {
+      const inputEl = document.getElementById('input-spotify-client-id');
+      const val = inputEl?.value?.trim();
+      if (val) {
+        spotifyService.setClientId(val);
+      }
+      if (!spotifyService.clientId) {
+        alert('Please paste your Spotify Client ID in the box above first, or use "Mode 1: Spotify App" to play full songs without developer setup!');
+        inputEl?.focus();
+        return;
+      }
       try {
         await spotifyService.loginWithPKCE();
       } catch (err) {
-        alert(err.message);
+        alert(err.message || 'Spotify login failed');
       }
     });
 
