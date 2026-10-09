@@ -12,7 +12,17 @@ export const CURATED_PLAYLISTS = [
     description: 'Mellow grooves, warm beats for strength and mobility.',
     uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M',
-    tag: 'Strength & Flow'
+    tag: 'Strength & Flow',
+    tracks: [
+      'spotify:track:4cOdK2wGLETKBW3PvgPWqT',
+      'spotify:track:0b9oOr9gqNmU265g4m9L0V',
+      'spotify:track:17i5j0oT1A8A2g5E6y9r8g',
+      'spotify:track:3AJwUDP919kvQ9QcozQPxg',
+      'spotify:track:27GmP9AWRs744SzKcpJsTZ',
+      'spotify:track:5u8b15YFz9m6K6gW49T6L2',
+      'spotify:track:7dt6x5M1jFuuqQKO5008nM',
+      'spotify:track:0VjIjW4GlUZAMYd2vXMi3b'
+    ]
   },
   {
     id: 'evening_acoustic',
@@ -21,7 +31,16 @@ export const CURATED_PLAYLISTS = [
     description: 'Gentle guitar and calm melodies for decompression.',
     uri: 'spotify:playlist:37i9dQZF1DX4E3UdUs7fUx',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DX4E3UdUs7fUx',
-    tag: 'Stretching'
+    tag: 'Stretching',
+    tracks: [
+      'spotify:track:5ihDGnhQgMA0F0tk9fNLl8',
+      'spotify:track:0VjIjW4GlUZAMYd2vXMi3b',
+      'spotify:track:7dt6x5M1jFuuqQKO5008nM',
+      'spotify:track:3B54sVLJ402z9AhU97jGQA',
+      'spotify:track:1BxfuPKGuaTgP7aM0XbdQA',
+      'spotify:track:2Foc5Q5nqNgoFjiG5iMEZq',
+      'spotify:track:3AJwUDP919kvQ9QcozQPxg'
+    ]
   },
   {
     id: 'ambient_sleep',
@@ -30,7 +49,15 @@ export const CURATED_PLAYLISTS = [
     description: 'Theta drone, calm strings, and soundscapes for wind-down.',
     uri: 'spotify:playlist:37i9dQZF1DWZd79rJ6a7lp',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DWZd79rJ6a7lp',
-    tag: 'Wind-Down'
+    tag: 'Wind-Down',
+    tracks: [
+      'spotify:track:1lD6F39XF9YyA86mQxK6qL',
+      'spotify:track:7h98J7A4N17o7c0K1Q2q5V',
+      'spotify:track:4jA5d0X7X8aM0Q3B6x8f1g',
+      'spotify:track:24jA5c0Y8f1x9Q4m8K2e5R',
+      'spotify:track:0b1Q53M9L6aZ28F79q5Y3B',
+      'spotify:track:6habFh0Dc4MUmioWmKXE0F'
+    ]
   },
   {
     id: 'peaceful_piano',
@@ -39,7 +66,16 @@ export const CURATED_PLAYLISTS = [
     description: 'Quiet piano for spinal stretches and mindful breathing.',
     uri: 'spotify:playlist:37i9dQZF1DX4sWSpwq3LiO',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DX4sWSpwq3LiO',
-    tag: 'Meditation'
+    tag: 'Meditation',
+    tracks: [
+      'spotify:track:1q8ik4h0GfG4HlYd9aG5gJ',
+      'spotify:track:3rUv15b3K75mP308iVjW4G',
+      'spotify:track:4VqPOruhp5EdPBeR92t6lQ',
+      'spotify:track:0b1Q53M9L6aZ28F79q5Y3B',
+      'spotify:track:6habFh0Dc4MUmioWmKXE0F',
+      'spotify:track:2d790Zc3B9N1A5F7x3X6dM',
+      'spotify:track:5ihDGnhQgMA0F0tk9fNLl8'
+    ]
   }
 ];
 
@@ -105,6 +141,25 @@ class SpotifyService {
   getActivePlaylistId() {
     const item = this.getActivePlaylist();
     return item.spotifyId || item.uri.replace('spotify:playlist:', '');
+  }
+
+  getRandomTrackUri(playlistUri = this.activePlaylistUri) {
+    const playlist = CURATED_PLAYLISTS.find(p => p.uri === playlistUri) || this.getActivePlaylist();
+    if (playlist && playlist.tracks && playlist.tracks.length > 0) {
+      const idx = Math.floor(Math.random() * playlist.tracks.length);
+      return playlist.tracks[idx];
+    }
+    return null;
+  }
+
+  getRandomAppDeepLink(playlistUri = this.activePlaylistUri) {
+    const playlist = CURATED_PLAYLISTS.find(p => p.uri === playlistUri) || this.getActivePlaylist();
+    const trackUri = this.getRandomTrackUri(playlistUri);
+    if (trackUri && playlist) {
+      const trackId = trackUri.replace('spotify:track:', '');
+      return `https://open.spotify.com/track/${trackId}?context=spotify:playlist:${playlist.spotifyId}`;
+    }
+    return playlist ? playlist.uri : this.activePlaylistUri;
   }
 
   isConnected() {
@@ -304,8 +359,25 @@ class SpotifyService {
     }
   }
 
+  // Toggle Spotify shuffle state
+  async setShuffle(state = true, deviceId = null) {
+    if (!this.token) return;
+    try {
+      const url = deviceId 
+        ? `https://api.spotify.com/v1/me/player/shuffle?state=${state}&device_id=${deviceId}`
+        : `https://api.spotify.com/v1/me/player/shuffle?state=${state}`;
+      await fetch(url, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${this.token}` }
+      });
+    } catch (e) {
+      console.warn('Spotify setShuffle error:', e);
+    }
+  }
+
   // Trigger Playback in background WITHOUT EVER jumping out of the app
-  async play(contextUri = this.activePlaylistUri) {
+  // Automatically randomizes starting position & enables shuffle so it doesn't repeat the same initial song!
+  async play(contextUri = this.activePlaylistUri, shuffle = true) {
     if (!this.token) {
       // Not logged in: keep inside app, user can use embedded player or ambient sounds
       return false;
@@ -329,6 +401,13 @@ class SpotifyService {
         await this.transferPlayback(targetDeviceId, true);
       }
 
+      if (shuffle) {
+        await this.setShuffle(true, targetDeviceId);
+      }
+
+      // Pick a random track index (0-25) so each routine starts on a fresh, different song!
+      const randomOffset = shuffle ? Math.floor(Math.random() * 25) : 0;
+
       const url = targetDeviceId 
         ? `https://api.spotify.com/v1/me/player/play?device_id=${targetDeviceId}`
         : 'https://api.spotify.com/v1/me/player/play';
@@ -341,7 +420,7 @@ class SpotifyService {
         },
         body: JSON.stringify({
           context_uri: contextUri,
-          offset: { position: 0 },
+          offset: { position: randomOffset },
           position_ms: 0
         })
       });
@@ -350,6 +429,23 @@ class SpotifyService {
         this.isPlaying = true;
         return true;
       } else {
+        // Fallback without offset if position exceeded list bounds
+        const retryRes = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${this.token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            context_uri: contextUri,
+            offset: { position: 0 },
+            position_ms: 0
+          })
+        });
+        if (retryRes.ok) {
+          this.isPlaying = true;
+          return true;
+        }
         console.warn('Spotify play response status:', res.status);
         return false;
       }

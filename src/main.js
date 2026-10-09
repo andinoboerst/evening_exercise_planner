@@ -235,10 +235,13 @@ function renderApp() {
           </div>
         </div>
         <div style="display: flex; gap: 6px; align-items: center;">
+          <button id="btn-dock-shuffle" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;" title="Shuffle to a fresh song">
+            🔀 Shuffle
+          </button>
           <button id="btn-dock-play-pause" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; display: ${isRunning ? 'inline-flex' : 'none'};">
             ${isPaused ? '▶ Resume' : '⏸ Pause'}
           </button>
-          <a id="btn-dock-open-app" href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; color: var(--spotify-green);" title="Play full songs directly in your Spotify app">
+          <a id="btn-dock-open-app" href="${spotifyService.getRandomAppDeepLink()}" target="_blank" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; color: var(--spotify-green);" title="Play in Spotify app with shuffled starting track">
             Spotify App ↗
           </a>
           <button id="btn-dock-change-playlist" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;">
@@ -760,7 +763,7 @@ function updateDockState() {
 
   const btnOpenApp = document.getElementById('btn-dock-open-app');
   if (btnOpenApp) {
-    btnOpenApp.href = spotifyService.getActivePlaylist().uri;
+    btnOpenApp.href = spotifyService.getRandomAppDeepLink();
   }
 }
 
@@ -847,14 +850,18 @@ async function startRoutine() {
   if (isSpotifyAudio()) {
     audioEngine.stopAmbient();
     
-    // 1. Play via Web API Connect if authorized
+    // 1. Play via Web API Connect if authorized (with shuffle enabled and random track offset)
     if (spotifyService.isConnected()) {
-      spotifyService.play().catch(e => console.warn('Spotify connect error:', e));
+      spotifyService.play(spotifyService.getActivePlaylist().uri, true).catch(e => console.warn('Spotify connect error:', e));
     }
 
-    // 2. Play via In-App Spotify Embed Controller
+    // 2. Play via In-App Spotify Embed Controller (shuffle to a random track)
     if (spotifyEmbedController) {
       try { 
+        const randomTrack = spotifyService.getRandomTrackUri();
+        if (randomTrack && typeof spotifyEmbedController.loadUri === 'function') {
+          spotifyEmbedController.loadUri(randomTrack);
+        }
         spotifyEmbedController.play(); 
       } catch (e) {
         console.warn('Embed play error:', e);
@@ -1472,6 +1479,23 @@ function bindEvents() {
   document.getElementById('btn-music-selector')?.addEventListener('click', openMusicHub);
   document.getElementById('btn-dock-change-playlist')?.addEventListener('click', openMusicHub);
   document.getElementById('btn-dock-play-pause')?.addEventListener('click', togglePause);
+  document.getElementById('btn-dock-shuffle')?.addEventListener('click', async () => {
+    if (spotifyService.isConnected()) {
+      await spotifyService.play(spotifyService.getActivePlaylist().uri, true);
+    }
+    if (spotifyEmbedController) {
+      const track = spotifyService.getRandomTrackUri();
+      if (track && typeof spotifyEmbedController.loadUri === 'function') {
+        spotifyEmbedController.loadUri(track);
+      }
+      try { spotifyEmbedController.play(); } catch (_) {}
+    }
+    const statusEl = document.getElementById('spotify-dock-status');
+    if (statusEl) {
+      statusEl.textContent = '🔀 Shuffled track';
+      setTimeout(updateDockState, 1800);
+    }
+  });
 
   // Install & Sideload Guide Modal
   document.getElementById('btn-install-guide')?.addEventListener('click', async () => {
