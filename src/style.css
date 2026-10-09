@@ -626,6 +626,8 @@ body.routine-active #app {
   min-height: 100vh;
   min-height: 100dvh;
   height: auto;
+  max-width: 580px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -776,18 +778,18 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   font-weight: 600;
 }
 
-/* 2. Duo Hero: Timer + Pose Side-by-Side (Fully Visible, Never Cropped) */
+/* 2. Duo Hero: Timer + Rectangular Pose Banner (Consistent Across Phone & Desktop) */
 .compact-duo-hero {
   display: flex;
   align-items: stretch;
   gap: 12px;
   width: 100%;
-  height: 160px;
+  height: 140px;
 }
 
 .compact-timer-box {
-  width: 150px;
-  height: 160px;
+  width: 140px;
+  height: 140px;
   flex-shrink: 0;
   position: relative;
   display: flex;
@@ -806,8 +808,6 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 .compact-timer-svg {
   width: 100%;
   height: 100%;
-  max-width: 160px;
-  max-height: 160px;
   transform: rotate(-90deg);
 }
 
@@ -823,7 +823,7 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 
 .compact-timer-digits {
   font-family: var(--font-heading);
-  font-size: 2.6rem;
+  font-size: 2.5rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -832,7 +832,7 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 }
 
 .compact-timer-status {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -848,50 +848,22 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 
 .compact-pose-box {
   flex: 1;
-  height: 160px;
+  height: 140px;
   min-width: 0;
   position: relative;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: radial-gradient(circle at center, #111827 0%, #030712 100%);
+  background: #03060c;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .compact-pose-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
   display: block;
-}
-
-@media (min-width: 640px) {
-  .compact-duo-hero {
-    height: 230px;
-    gap: 16px;
-  }
-
-  .compact-timer-box {
-    width: 200px;
-    height: 230px;
-  }
-
-  .compact-timer-svg {
-    max-width: 210px;
-    max-height: 210px;
-  }
-
-  .compact-timer-digits {
-    font-size: 3.4rem;
-  }
-
-  .compact-pose-box {
-    height: 230px;
-  }
 }
 
 /* 3. Exercise Details & Setup Box */
