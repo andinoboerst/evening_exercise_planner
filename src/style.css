@@ -784,12 +784,12 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   align-items: stretch;
   gap: 12px;
   width: 100%;
-  height: 140px;
+  height: 165px;
 }
 
 .compact-timer-box {
-  width: 140px;
-  height: 140px;
+  width: 145px;
+  height: 165px;
   flex-shrink: 0;
   position: relative;
   display: flex;
@@ -806,8 +806,8 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 }
 
 .compact-timer-svg {
-  width: 100%;
-  height: 100%;
+  width: 135px;
+  height: 135px;
   transform: rotate(-90deg);
 }
 
@@ -832,7 +832,7 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 }
 
 .compact-timer-status {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -848,7 +848,7 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 
 .compact-pose-box {
   flex: 1;
-  height: 140px;
+  height: 165px;
   min-width: 0;
   position: relative;
   border-radius: var(--radius-md);
@@ -862,8 +862,37 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: center 54%;
   display: block;
+}
+
+@media (min-width: 600px) {
+  .compact-duo-hero {
+    height: 195px;
+    gap: 14px;
+  }
+
+  .compact-timer-box {
+    width: 165px;
+    height: 195px;
+  }
+
+  .compact-timer-svg {
+    width: 150px;
+    height: 150px;
+  }
+
+  .compact-timer-digits {
+    font-size: 3rem;
+  }
+
+  .compact-pose-box {
+    height: 195px;
+  }
+
+  .compact-pose-img {
+    object-position: center 53%;
+  }
 }
 
 /* 3. Exercise Details & Setup Box */
