@@ -31,6 +31,7 @@ let enabledPhases = {
 
 let currentStepIndex = 0;
 let flattenedSteps = [];
+const TIMER_RADIUS = 52; // Compact duo circular timer radius (viewBox 0 0 120 120, cx 60, cy 60)
 
 // Flattened steps calculation for exact timeline
 function buildFlattenedSteps(routine) {
@@ -259,7 +260,7 @@ function renderApp() {
     </div>
 
     <!-- Overall Session Progress Bar (Bottom) -->
-    <div style="margin-top: 14px; margin-bottom: 12px;">
+    <div class="bottom-timeline-wrapper" style="margin-top: 14px; margin-bottom: 12px;">
       <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 4px;">
         <span>Routine Progress</span>
         <span id="overall-time-counter">${formatTime(totalRoutineElapsedSec)} / ${formatTime(getEnabledDurationSec())}</span>
@@ -518,126 +519,182 @@ function updateStageUI() {
 
 
   } else {
-    // Render Active Workout Screen
+    // Render Active Workout Screen (Compact, Single-Screen Mobile Layout)
     const currentStep = flattenedSteps[currentStepIndex];
     if (!currentStep) return;
 
     const currentPhase = currentStep.phase;
     const currentEx = currentStep.exercise;
     const nextStep = flattenedSteps[currentStepIndex + 1];
+    const upcomingEx = nextStep ? nextStep.exercise : null;
+    const isRest = currentStep.isRest;
+
+    // The pose to visually showcase:
+    // If resting, show UPCOMING exercise posture so couple gets into position!
+    const displayEx = (isRest && upcomingEx) ? upcomingEx : currentEx;
+    const displayPoseImg = getPoseImage(displayEx);
 
     const phaseClass = currentPhase.id; // 'strength', 'mobility', 'windDown'
     const phaseColor = currentPhase.color;
     const hasMorePhases = flattenedSteps.slice(currentStepIndex + 1).some(s => s.phaseIndex !== currentStep.phaseIndex);
 
-    // SVG Circle Calculations
-    const radius = 105;
-    const circumference = 2 * Math.PI * radius;
+    // SVG Circle Calculations for Compact Duo Timer
+    const circumference = 2 * Math.PI * TIMER_RADIUS;
     const progressFraction = (currentStep.duration - intervalRemainingSec) / currentStep.duration;
     const strokeDashoffset = circumference - (progressFraction * circumference);
 
     stageEl.innerHTML = `
-      <section class="active-session-card">
-        <!-- Phase Badge -->
-        <div class="active-phase-badge ${phaseClass}">
-          <span>Phase ${currentStep.phaseIndex + 1}: ${currentPhase.title}</span>
-          ${hasMorePhases ? `
-            <button id="btn-skip-phase" class="btn-skip-phase-pill" title="Skip remaining exercises in this section and move to next">
-              Skip Section ⏭
-            </button>
-          ` : ''}
+      <section class="compact-active-card">
+        <!-- 1. Top Phase & Skip Header -->
+        <div class="compact-card-header ${phaseClass}">
+          <div class="compact-phase-info">
+            <span class="compact-phase-dot" style="background: ${phaseColor};"></span>
+            <span class="compact-phase-title">Phase ${currentStep.phaseIndex + 1}: ${currentPhase.title}</span>
+          </div>
+          <div class="compact-header-actions">
+            <span class="compact-time-left" id="timer-total-remaining-display">
+              ${formatTime(getRoutineRemainingSec())} left
+            </span>
+            ${hasMorePhases ? `
+              <button id="btn-skip-phase" class="btn-skip-phase-pill" title="Skip remaining exercises in this section and move to next">
+                Skip Section ⏭
+              </button>
+            ` : ''}
+          </div>
         </div>
 
-        <!-- Timer Circle -->
-        <div class="timer-container">
-          <svg class="timer-svg" viewBox="0 0 240 240">
-            <circle class="timer-track" cx="120" cy="120" r="${radius}"></circle>
-            <circle 
-              id="timer-progress-ring"
-              class="timer-progress" 
-              cx="120" 
-              cy="120" 
-              r="${radius}"
-              stroke="${currentStep.isRest ? '#38bdf8' : phaseColor}"
-              stroke-dasharray="${circumference}"
-              stroke-dashoffset="${strokeDashoffset}"
-            ></circle>
-          </svg>
-          <div class="timer-inner-content">
-            <div class="timer-digits" id="timer-display">${intervalRemainingSec}</div>
-            <div class="timer-status-label" style="color: ${currentStep.isRest ? '#38bdf8' : phaseColor};">
-              ${currentStep.isRest ? 'REST / BREATHE' : 'EXERCISE HOLD'}
+        <!-- 2. Duo Hero: Compact Timer & Pose Image Side-by-Side (Saves 350+ vertical px!) -->
+        <div class="compact-duo-hero">
+          <!-- Compact Timer Circle -->
+          <div class="compact-timer-box ${isRest ? 'is-rest' : ''}">
+            <svg class="compact-timer-svg" viewBox="0 0 120 120">
+              <circle class="timer-track" cx="60" cy="60" r="${TIMER_RADIUS}"></circle>
+              <circle 
+                id="timer-progress-ring"
+                class="timer-progress" 
+                cx="60" 
+                cy="60" 
+                r="${TIMER_RADIUS}"
+                stroke="${isRest ? '#38bdf8' : phaseColor}"
+                stroke-dasharray="${circumference}"
+                stroke-dashoffset="${strokeDashoffset}"
+              ></circle>
+            </svg>
+            <div class="compact-timer-inner">
+              <div class="compact-timer-digits" id="timer-display">${intervalRemainingSec}</div>
+              <div class="compact-timer-status" style="color: ${isRest ? '#38bdf8' : phaseColor};">
+                ${isRest ? 'BREATHE' : 'HOLD'}
+              </div>
+              <div class="compact-timer-sub">
+                ${isRest ? 'Transition' : `Ex ${currentStep.exerciseIndex + 1}/${currentPhase.exercises.length}`}
+              </div>
             </div>
-            <div class="timer-total-remaining" id="timer-total-remaining-display">
-              Total left: ${formatTime(getRoutineRemainingSec())}
+          </div>
+
+          <!-- Compact Pose Visual Preview -->
+          <div class="compact-pose-box">
+            <img 
+              src="${displayPoseImg}" 
+              alt="${displayEx.name}" 
+              class="compact-pose-img"
+            />
+            <div class="compact-pose-badge ${isRest ? 'rest-badge' : ''}">
+              ${isRest 
+                ? `<span>Up Next: <strong>${upcomingEx ? upcomingEx.name : 'Next Section'}</strong></span>`
+                : `<span>${currentEx.name}</span>`
+              }
             </div>
           </div>
         </div>
 
-        <!-- High-Quality Visual Pose Illustration -->
-        <div class="exercise-pose-container">
-          <img 
-            src="${currentStep.isRest && nextStep?.exercise ? getPoseImage(nextStep.exercise) : getPoseImage(currentEx)}" 
-            alt="${currentEx.name}" 
-            class="exercise-pose-img"
-          />
-          <div class="exercise-pose-overlay">
-            <span class="exercise-pose-tag">${currentStep.isRest ? `Up Next: ${nextStep?.exercise?.name || 'Complete'}` : currentEx.name}</span>
-          </div>
+        <!-- 3. Exercise Details & Instructions (Shows upcoming exercise setup during rest!) -->
+        <div class="compact-details-box">
+          ${isRest ? `
+            <!-- REST INTERVAL: Clearly explains upcoming movement to get in position -->
+            <div class="compact-rest-panel">
+              <div class="compact-title-row">
+                <span class="rest-tag-badge">💨 Rest & Breathe</span>
+                <h2 class="compact-ex-name rest-highlight">
+                  ${upcomingEx ? `Up Next: ${upcomingEx.name}` : 'Phase Complete'}
+                </h2>
+                ${upcomingEx?.target ? `<span class="compact-target-pill">${upcomingEx.target}</span>` : ''}
+              </div>
+
+              <div class="compact-instructions-card rest-card">
+                ${upcomingEx ? `
+                  <div class="upcoming-setup-lead">
+                    <span class="lead-icon">🧘</span>
+                    <span class="lead-text"><strong>Get in Position:</strong> ${upcomingEx.instructions}</span>
+                  </div>
+                  ${upcomingEx.partnerTip ? `
+                    <div class="compact-tip-line">
+                      <span class="tip-icon">✨</span>
+                      <span class="tip-text"><strong>Partner Tip:</strong> ${upcomingEx.partnerTip}</span>
+                    </div>
+                  ` : ''}
+                ` : `
+                  <p class="compact-desc-text">Deep belly inhale through nose, relaxing exhale through mouth. Prepare for next phase.</p>
+                `}
+              </div>
+            </div>
+          ` : `
+            <!-- ACTIVE EXERCISE HOLD -->
+            <div class="compact-work-panel">
+              <div class="compact-title-row">
+                <h2 class="compact-ex-name">${currentEx.name}</h2>
+                <span class="compact-target-pill">${currentEx.target}</span>
+              </div>
+
+              <div class="compact-instructions-card">
+                <p class="compact-desc-text">${currentEx.instructions}</p>
+                ${currentEx.partnerTip ? `
+                  <div class="compact-tip-line">
+                    <span class="tip-icon">✨</span>
+                    <span class="tip-text"><strong>Partner Tip:</strong> ${currentEx.partnerTip}</span>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `}
         </div>
 
-        <!-- Exercise Details -->
-        <div class="current-exercise-details">
-          <h2 class="exercise-name">${currentStep.isRest ? `Rest (Next: ${nextStep?.exercise?.name || 'Done'})` : currentEx.name}</h2>
-          ${!currentStep.isRest ? `<span class="exercise-target-badge">${currentEx.target}</span>` : ''}
-          <p class="exercise-instructions">
-            ${currentStep.isRest 
-              ? 'Deep belly inhale through nose, relaxing exhale through mouth. Prepare mat posture.' 
-              : currentEx.instructions}
-          </p>
-        </div>
-
-        <!-- Partner Coaching Callout -->
-        <div class="partner-callout">
-          <span class="partner-callout-icon">✨</span>
-          <div class="partner-callout-text">
-            <strong>Partner Tip:</strong> ${currentEx.partnerTip}
-          </div>
-        </div>
-
-        <!-- Up Next Preview -->
-        ${nextStep ? `
-          <div class="up-next-strip">
-            <span class="up-next-label">Up Next:</span>
-            <span class="up-next-name">${nextStep.isRest ? 'Rest Interval' : nextStep.exercise.name}</span>
-          </div>
-        ` : ''}
-
-        <!-- Interactive Session Controls -->
-        <div class="session-controls">
-          <button id="btn-prev-step" class="control-btn control-btn-secondary" title="Previous Step">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+        <!-- 4. Compact Controls Row -->
+        <div class="compact-controls-row">
+          <button id="btn-prev-step" class="compact-btn compact-btn-nav" title="Previous Step">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
           </button>
 
-          <button id="btn-play-pause" class="control-btn control-btn-primary" title="${isPaused ? 'Resume' : 'Pause'}">
+          <button id="btn-play-pause" class="compact-btn compact-btn-main" title="${isPaused ? 'Resume' : 'Pause'}">
             ${isPaused ? `
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             ` : `
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
             `}
           </button>
 
-          <button id="btn-next-step" class="control-btn control-btn-secondary" title="Skip to Next">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+          <button id="btn-next-step" class="compact-btn compact-btn-nav" title="Skip to Next">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+          </button>
+
+          <button id="btn-stop-session" class="compact-btn compact-btn-stop" title="End Routine Early">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect></svg>
+            <span>End</span>
           </button>
         </div>
 
-        <!-- Dedicated Stop Bar with generous touch target -->
-        <div class="btn-stop-bar">
-          <button id="btn-stop-session" class="btn-stop-outline">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-            <span>End Routine Early</span>
-          </button>
+        <!-- 5. Integrated Routine Progress Bar -->
+        <div class="compact-timeline-strip">
+          <div class="compact-timeline-labels">
+            <span>Routine Progress</span>
+            <span id="overall-time-counter">${formatTime(totalRoutineElapsedSec)} / ${formatTime(getEnabledDurationSec())}</span>
+          </div>
+          <div class="compact-timeline-bar-bg">
+            <div 
+              id="overall-timeline-bar" 
+              class="compact-timeline-bar-fill" 
+              style="width: ${(totalRoutineElapsedSec / Math.max(1, getEnabledDurationSec())) * 100}%;"
+            ></div>
+          </div>
         </div>
       </section>
     `;
@@ -809,6 +866,7 @@ async function startRoutine() {
   }
 
   // Update UI into active state WITHOUT tearing down the Spotify dock!
+  document.body.classList.add('routine-active');
   updateStageUI();
   updatePhasePills();
   updateDockState();
@@ -837,8 +895,7 @@ function runTimerLoop() {
 
     const ring = document.getElementById('timer-progress-ring');
     if (ring) {
-      const radius = 105;
-      const circumference = 2 * Math.PI * radius;
+      const circumference = 2 * Math.PI * TIMER_RADIUS;
       const frac = (currentStep.duration - intervalRemainingSec) / currentStep.duration;
       ring.style.strokeDashoffset = circumference - (frac * circumference);
     }
@@ -876,13 +933,20 @@ function updateTimelineProgress() {
   const elapsedSec = getRoutineElapsedSec();
   const remainingSec = getRoutineRemainingSec();
 
-  const bar = document.getElementById('overall-timeline-bar');
-  const timeCount = document.getElementById('overall-time-counter');
-  if (bar) bar.style.width = `${Math.min(100, (elapsedSec / totalSec) * 100)}%`;
-  if (timeCount) timeCount.textContent = `${formatTime(elapsedSec)} / ${formatTime(totalSec)}`;
+  const bars = document.querySelectorAll('#overall-timeline-bar');
+  bars.forEach(bar => {
+    bar.style.width = `${Math.min(100, (elapsedSec / totalSec) * 100)}%`;
+  });
 
-  const totalRemainingEl = document.getElementById('timer-total-remaining-display');
-  if (totalRemainingEl) totalRemainingEl.textContent = `Total left: ${formatTime(remainingSec)}`;
+  const timeCounts = document.querySelectorAll('#overall-time-counter');
+  timeCounts.forEach(tc => {
+    tc.textContent = `${formatTime(elapsedSec)} / ${formatTime(totalSec)}`;
+  });
+
+  const totalRemainingEls = document.querySelectorAll('#timer-total-remaining-display');
+  totalRemainingEls.forEach(el => {
+    el.textContent = `${formatTime(remainingSec)} left`;
+  });
 }
 
 // Move to next exercise or rest step (preserves continuous Spotify audio stream)
@@ -926,7 +990,9 @@ function advanceStep() {
   } else {
     if (newStep.isRest) {
       audioEngine.playChime('complete');
-      audioEngine.speak(`Rest and breathe for ${newStep.duration} seconds.`, false);
+      const upcoming = flattenedSteps[currentStepIndex + 1];
+      const upName = upcoming?.exercise?.name ? upcoming.exercise.name : 'the next exercise';
+      audioEngine.speak(`Rest and breathe. Up next: ${upName}.`, false);
     } else {
       audioEngine.playChime('start');
       audioEngine.speak(`Start: ${newStep.exercise.name}.`, true);
@@ -1038,6 +1104,7 @@ function stopRoutine() {
   if (timerInterval) clearInterval(timerInterval);
   isRunning = false;
   isPaused = false;
+  document.body.classList.remove('routine-active');
   audioEngine.stopAmbient();
   audioEngine.stopSpeech();
   if (spotifyEmbedController) {
@@ -1055,6 +1122,7 @@ function completeRoutine() {
   if (timerInterval) clearInterval(timerInterval);
   isRunning = false;
   isPaused = false;
+  document.body.classList.remove('routine-active');
   audioEngine.playPhaseGong();
   audioEngine.stopAmbient();
   wakeLockService.releaseLock();
