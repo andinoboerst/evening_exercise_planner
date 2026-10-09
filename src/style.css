@@ -612,16 +612,18 @@ body {
    ROUTINE-ACTIVE SINGLE-SCREEN COMPACT MODE
    =================================================== */
 body.routine-active {
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 body.routine-active #app {
   padding-top: calc(var(--safe-top) + 6px);
-  padding-bottom: calc(var(--safe-bottom) + 10px);
-  padding-left: 16px;
-  padding-right: 16px;
-  height: 100vh;
-  height: 100dvh;
+  padding-bottom: calc(var(--safe-bottom) + 8px);
+  padding-left: 14px;
+  padding-right: 14px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
   justify-content: flex-start;
 }
 
@@ -632,32 +634,25 @@ body.routine-active .app-header {
 
 body.routine-active .header-center,
 body.routine-active .avatar-group,
-body.routine-active .day-picker-pill {
+body.routine-active .day-picker-pill,
+body.routine-active .day-selector-container,
+body.routine-active .phase-breakdown-bar,
+body.routine-active .phase-pills-strip,
+body.routine-active .bottom-strip,
+body.routine-active .bottom-timeline-wrapper {
   display: none !important;
 }
 
 body.routine-active .brand-icon-wrap {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 
 body.routine-active .brand-title {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
 }
 
 body.routine-active .brand-subtitle {
-  display: none !important;
-}
-
-body.routine-active .phase-pills-strip {
-  display: none !important;
-}
-
-body.routine-active .bottom-strip {
-  display: none !important;
-}
-
-body.routine-active .bottom-timeline-wrapper {
   display: none !important;
 }
 
@@ -666,17 +661,57 @@ body.routine-active .main-stage {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  width: 100%;
 }
 
-/* Spotify dock in active routine */
+/* Spotify dock in active routine: sleek, non-intrusive strip that never covers routine controls */
 body.routine-active .spotify-player-dock {
-  margin-top: 6px;
+  margin-top: 8px;
+  margin-bottom: 2px;
   padding: 6px 12px;
   border-radius: var(--radius-md);
-  background: rgba(14, 19, 34, 0.7);
+  background: rgba(14, 19, 34, 0.85);
+  border: 1px solid rgba(29, 185, 84, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  width: 100%;
 }
+
+body.routine-active .spotify-player-dock .spotify-inapp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+body.routine-active .spotify-player-dock .spotify-inapp-title {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 body.routine-active .spotify-inapp-sub {
-  display: none;
+  display: none !important;
+}
+
+/* Collapse the visual iframe during active routine so it NEVER covers or pushes controls,
+   while keeping it active in the DOM so background audio continues seamlessly */
+body.routine-active #spotify-embed-container,
+body.routine-active #spotify-embed-container iframe,
+body.routine-active .spotify-player-dock iframe {
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  pointer-events: none !important;
 }
 
 /* ===================================================
@@ -686,14 +721,14 @@ body.routine-active .spotify-inapp-sub {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* 1. Header Bar: Phase & Skip Pill */
@@ -756,18 +791,18 @@ body.routine-active .spotify-inapp-sub {
   font-weight: 600;
 }
 
-/* 2. Duo Hero: Timer + Pose Side-by-Side (More Spacious 140px Height) */
+/* 2. Duo Hero: Timer + Pose Side-by-Side (Comfortable 125px Height) */
 .compact-duo-hero {
   display: flex;
   align-items: stretch;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  height: 140px;
+  height: 125px;
 }
 
 .compact-timer-box {
-  width: 140px;
-  height: 140px;
+  width: 125px;
+  height: 125px;
   flex-shrink: 0;
   position: relative;
   display: flex;
@@ -801,7 +836,7 @@ body.routine-active .spotify-inapp-sub {
 
 .compact-timer-digits {
   font-family: var(--font-heading);
-  font-size: 2.5rem;
+  font-size: 2.2rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -826,7 +861,7 @@ body.routine-active .spotify-inapp-sub {
 
 .compact-pose-box {
   flex: 1;
-  height: 140px;
+  height: 125px;
   min-width: 0;
   position: relative;
   border-radius: var(--radius-md);
@@ -1029,9 +1064,10 @@ body.routine-active .spotify-inapp-sub {
 }
 
 .compact-btn-nav {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .compact-btn-nav:hover {
@@ -1041,12 +1077,13 @@ body.routine-active .spotify-inapp-sub {
 }
 
 .compact-btn-main {
-  width: 64px;
-  height: 64px;
+  width: 58px;
+  height: 58px;
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border: none;
   color: #ffffff;
   box-shadow: 0 4px 20px rgba(99, 102, 241, 0.45);
+  flex-shrink: 0;
 }
 
 .compact-btn-main:hover {
@@ -1059,15 +1096,16 @@ body.routine-active .spotify-inapp-sub {
 }
 
 .compact-btn-stop {
-  height: 42px;
-  padding: 0 16px;
+  height: 40px;
+  padding: 0 14px;
   background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.25);
   color: #fca5a5;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  gap: 6px;
+  gap: 5px;
   border-radius: var(--radius-full);
+  flex-shrink: 0;
 }
 
 .compact-btn-stop:hover {

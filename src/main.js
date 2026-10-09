@@ -602,12 +602,6 @@ function updateStageUI() {
               alt="${displayEx.name}" 
               class="compact-pose-img"
             />
-            <div class="compact-pose-badge ${isRest ? 'rest-badge' : ''}">
-              ${isRest 
-                ? `<span class="pose-badge-tag">Up Next:</span><span class="pose-badge-name">${upcomingEx ? upcomingEx.name : 'Next Section'}</span>`
-                : `<span class="pose-badge-name">${currentEx.name}</span>`
-              }
-            </div>
           </div>
         </div>
 
@@ -708,11 +702,11 @@ function updateStageUI() {
       </section>
     `;
 
-    document.getElementById('btn-play-pause').addEventListener('click', togglePause);
-    document.getElementById('btn-next-step').addEventListener('click', skipToNextStep);
-    document.getElementById('btn-prev-step').addEventListener('click', goToPreviousStep);
+    document.getElementById('btn-play-pause')?.addEventListener('click', togglePause);
+    document.getElementById('btn-next-step')?.addEventListener('click', skipToNextStep);
+    document.getElementById('btn-prev-step')?.addEventListener('click', goToPreviousStep);
     document.getElementById('btn-skip-phase')?.addEventListener('click', skipCurrentPhase);
-    document.getElementById('btn-stop-session').addEventListener('click', confirmStopRoutine);
+    document.getElementById('btn-stop-session')?.addEventListener('click', confirmStopRoutine);
   }
 }
 
