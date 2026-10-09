@@ -29,38 +29,8 @@ let enabledPhases = {
   windDown: true
 };
 
-function getEnabledDurationSec() {
-  let sec = 0;
-  if (enabledPhases.strength) sec += 600; // 10 min
-  if (enabledPhases.mobility) sec += 900; // 15 min
-  if (enabledPhases.windDown) sec += 300; // 5 min
-  return sec;
-}
-
-function getEnabledDurationMin() {
-  return Math.round(getEnabledDurationSec() / 60);
-}
-
-// Audio / Feature Settings
-let settings = {
-  voiceEnabled: true,
-  soundEffectsEnabled: true,
-  audioSource: 'spotify-app', // 'spotify-app' (default!), 'ambient', 'spotify-embed', 'silent'
-  ambientSound: 'drone'       // 'drone', 'rain', 'bowls'
-};
-
-const isSpotifyApp = () => settings.audioSource === 'spotify-app' || settings.audioSource === 'spotify';
-const isSpotifyEmbed = () => settings.audioSource === 'spotify-embed';
-
-let spotifyEmbedController = null;
-let pendingSpotifyPlay = false;
-
-// Audio Ducking: automatically lower Spotify background music when voice coach speaks
-audioEngine.onDuck = (isDucking) => {
-  if (isSpotifyApp() || isSpotifyEmbed()) {
-    spotifyService.duck(isDucking);
-  }
-};
+let currentStepIndex = 0;
+let flattenedSteps = [];
 
 // Flattened steps calculation for exact timeline
 function buildFlattenedSteps(routine) {
@@ -95,8 +65,61 @@ function buildFlattenedSteps(routine) {
   return steps;
 }
 
-let flattenedSteps = buildFlattenedSteps(activeRoutine);
-let currentStepIndex = 0;
+flattenedSteps = buildFlattenedSteps(activeRoutine);
+
+function getEnabledDurationSec() {
+  if (flattenedSteps && flattenedSteps.length > 0) {
+    return flattenedSteps.reduce((acc, step) => acc + step.duration, 0);
+  }
+  let sec = 0;
+  if (enabledPhases.strength) sec += 600; // 10 min
+  if (enabledPhases.mobility) sec += 900; // 15 min
+  if (enabledPhases.windDown) sec += 300; // 5 min
+  return sec;
+}
+
+function getEnabledDurationMin() {
+  return Math.round(getEnabledDurationSec() / 60);
+}
+
+// Calculate exact remaining time based on current interval seconds + all future exercises
+function getRoutineRemainingSec() {
+  if (!isRunning || currentStepIndex >= flattenedSteps.length) {
+    return getEnabledDurationSec();
+  }
+  let remaining = Math.max(0, intervalRemainingSec);
+  for (let i = currentStepIndex + 1; i < flattenedSteps.length; i++) {
+    remaining += flattenedSteps[i].duration;
+  }
+  return remaining;
+}
+
+// Calculate elapsed time from enabled total minus actual remaining
+function getRoutineElapsedSec() {
+  const total = getEnabledDurationSec();
+  return Math.max(0, total - getRoutineRemainingSec());
+}
+
+// Audio / Feature Settings
+let settings = {
+  voiceEnabled: true,
+  soundEffectsEnabled: true,
+  audioSource: 'spotify-app', // 'spotify-app' (default!), 'ambient', 'spotify-embed', 'silent'
+  ambientSound: 'drone'       // 'drone', 'rain', 'bowls'
+};
+
+const isSpotifyApp = () => settings.audioSource === 'spotify-app' || settings.audioSource === 'spotify';
+const isSpotifyEmbed = () => settings.audioSource === 'spotify-embed';
+
+let spotifyEmbedController = null;
+let pendingSpotifyPlay = false;
+
+// Audio Ducking: automatically lower Spotify background music when voice coach speaks
+audioEngine.onDuck = (isDucking) => {
+  if (isSpotifyApp() || isSpotifyEmbed()) {
+    spotifyService.duck(isDucking);
+  }
+};
 
 // Format seconds into MM:SS
 function formatTime(sec) {
@@ -104,6 +127,7 @@ function formatTime(sec) {
   const s = Math.floor(sec % 60);
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
+
 
 // Render Main App Shell
 function renderApp() {
@@ -120,7 +144,7 @@ function renderApp() {
         <div>
           <h1 class="brand-title">NOCTURNE</h1>
           <div class="brand-subtitle">
-            <span>30m Couples Mat Routine</span>
+            <span>${getEnabledDurationMin()}m Couples Mat Routine</span>
             <span>•</span>
             <span id="wake-lock-badge" style="color: #38bdf8;">Screen Awake</span>
           </div>
@@ -159,7 +183,7 @@ function renderApp() {
           return `
             <button class="day-chip ${isSelected ? 'active' : ''} ${isToday ? 'is-today' : ''}" data-day="${dIdx}">
               <span class="day-chip-name">${shortName}</span>
-              <span class="day-chip-state">${isToday ? 'Today' : '30m'}</span>
+              <span class="day-chip-state">${isToday ? 'Today' : `${getEnabledDurationMin()}m`}</span>
             </button>
           `;
         }).join('')}
@@ -504,6 +528,7 @@ function updateStageUI() {
 
     const phaseClass = currentPhase.id; // 'strength', 'mobility', 'windDown'
     const phaseColor = currentPhase.color;
+    const hasMorePhases = flattenedSteps.slice(currentStepIndex + 1).some(s => s.phaseIndex !== currentStep.phaseIndex);
 
     // SVG Circle Calculations
     const radius = 105;
@@ -515,8 +540,12 @@ function updateStageUI() {
       <section class="active-session-card">
         <!-- Phase Badge -->
         <div class="active-phase-badge ${phaseClass}">
-          <span>Phase ${currentStep.phaseIndex + 1} of 3:</span>
-          <span>${currentPhase.title}</span>
+          <span>Phase ${currentStep.phaseIndex + 1}: ${currentPhase.title}</span>
+          ${hasMorePhases ? `
+            <button id="btn-skip-phase" class="btn-skip-phase-pill" title="Skip remaining exercises in this section and move to next">
+              Skip Section ⏭
+            </button>
+          ` : ''}
         </div>
 
         <!-- Timer Circle -->
@@ -539,8 +568,8 @@ function updateStageUI() {
             <div class="timer-status-label" style="color: ${currentStep.isRest ? '#38bdf8' : phaseColor};">
               ${currentStep.isRest ? 'REST / BREATHE' : 'EXERCISE HOLD'}
             </div>
-            <div class="timer-total-remaining">
-              Total left: ${formatTime(Math.max(0, getEnabledDurationSec() - totalRoutineElapsedSec))}
+            <div class="timer-total-remaining" id="timer-total-remaining-display">
+              Total left: ${formatTime(getRoutineRemainingSec())}
             </div>
           </div>
         </div>
@@ -616,6 +645,7 @@ function updateStageUI() {
     document.getElementById('btn-play-pause').addEventListener('click', togglePause);
     document.getElementById('btn-next-step').addEventListener('click', skipToNextStep);
     document.getElementById('btn-prev-step').addEventListener('click', goToPreviousStep);
+    document.getElementById('btn-skip-phase')?.addEventListener('click', skipCurrentPhase);
     document.getElementById('btn-stop-session').addEventListener('click', confirmStopRoutine);
   }
 }
@@ -795,12 +825,8 @@ function runTimerLoop() {
     intervalRemainingSec--;
     totalRoutineElapsedSec++;
 
-    // Update bottom overall bar
-    const totalSec = Math.max(1, getEnabledDurationSec());
-    const bar = document.getElementById('overall-timeline-bar');
-    const timeCount = document.getElementById('overall-time-counter');
-    if (bar) bar.style.width = `${Math.min(100, (totalRoutineElapsedSec / totalSec) * 100)}%`;
-    if (timeCount) timeCount.textContent = `${formatTime(totalRoutineElapsedSec)} / ${formatTime(totalSec)}`;
+    // Update bottom overall bar & accurate remaining timer
+    updateTimelineProgress();
 
     const currentStep = flattenedSteps[currentStepIndex];
     if (!currentStep) return;
@@ -844,11 +870,26 @@ function runTimerLoop() {
   }, 1000);
 }
 
+// Synchronize remaining time, elapsed time, and bottom timeline progress bar
+function updateTimelineProgress() {
+  const totalSec = Math.max(1, getEnabledDurationSec());
+  const elapsedSec = getRoutineElapsedSec();
+  const remainingSec = getRoutineRemainingSec();
+
+  const bar = document.getElementById('overall-timeline-bar');
+  const timeCount = document.getElementById('overall-time-counter');
+  if (bar) bar.style.width = `${Math.min(100, (elapsedSec / totalSec) * 100)}%`;
+  if (timeCount) timeCount.textContent = `${formatTime(elapsedSec)} / ${formatTime(totalSec)}`;
+
+  const totalRemainingEl = document.getElementById('timer-total-remaining-display');
+  if (totalRemainingEl) totalRemainingEl.textContent = `Total left: ${formatTime(remainingSec)}`;
+}
+
 // Move to next exercise or rest step (preserves continuous Spotify audio stream)
 function advanceStep() {
   currentStepIndex++;
 
-  if (currentStepIndex >= flattenedSteps.length || totalRoutineElapsedSec >= getEnabledDurationSec()) {
+  if (currentStepIndex >= flattenedSteps.length) {
     completeRoutine();
     return;
   }
@@ -895,6 +936,7 @@ function advanceStep() {
   // Update stage and phase badges WITHOUT re-rendering app shell (Spotify keeps playing!)
   updateStageUI();
   updatePhasePills();
+  updateTimelineProgress();
 }
 
 function skipToNextStep() {
@@ -909,6 +951,32 @@ function goToPreviousStep() {
     currentPhaseIndex = newStep.phaseIndex;
     updateStageUI();
     updatePhasePills();
+    updateTimelineProgress();
+  }
+}
+
+// Skip entire current phase and jump directly to next section
+function skipCurrentPhase() {
+  const currentStep = flattenedSteps[currentStepIndex];
+  if (!currentStep) return;
+  const currentPIdx = currentStep.phaseIndex;
+
+  const nextPhaseStepIndex = flattenedSteps.findIndex((step, idx) => idx > currentStepIndex && step.phaseIndex !== currentPIdx);
+
+  if (nextPhaseStepIndex !== -1) {
+    currentStepIndex = nextPhaseStepIndex;
+    const newStep = flattenedSteps[currentStepIndex];
+    intervalRemainingSec = newStep.duration;
+    currentPhaseIndex = newStep.phaseIndex;
+
+    audioEngine.playPhaseGong();
+    audioEngine.speak(`Skipping to ${newStep.phase.title}. First exercise: ${newStep.exercise.name}.`, true);
+
+    updateStageUI();
+    updatePhasePills();
+    updateTimelineProgress();
+  } else {
+    completeRoutine();
   }
 }
 
@@ -946,7 +1014,7 @@ function confirmStopRoutine() {
       <div style="font-size: 2.2rem; margin-bottom: 12px;">🌙</div>
       <h3 style="font-family: var(--font-heading); font-size: 1.35rem; font-weight: 700; color: #fff; margin-bottom: 8px;">End Routine Early?</h3>
       <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.45;">
-        You've completed ${formatTime(totalRoutineElapsedSec)} of your 30-minute evening session. Would you like to resume or wrap up?
+        You've completed ${formatTime(getRoutineElapsedSec())} of your ${getEnabledDurationMin()}-minute evening session. Would you like to resume or wrap up?
       </p>
       <div style="display: flex; gap: 12px;">
         <button id="btn-cancel-stop" class="btn-primary-start" style="flex: 1; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); color: #fff; font-size: 0.95rem; padding: 14px 10px;">
@@ -1001,14 +1069,14 @@ function completeRoutine() {
     });
   } catch (_) {}
 
-  audioEngine.speak("Congratulations! You completed your 30-minute evening routine together. You are ready for restful sleep. Goodnight.", true);
+  audioEngine.speak(`Congratulations! You completed your ${getEnabledDurationMin()}-minute evening routine together. You are ready for restful sleep. Goodnight.`, true);
 
   openModal(`
     <div class="completion-content">
       <div class="completion-icon-ring">🌙</div>
       <h2 class="completion-title">Rest Well Tonight!</h2>
       <p class="completion-text">
-        You spent <strong>10 minutes on strength</strong>, <strong>15 minutes on mobility</strong>, and <strong>5 minutes winding down</strong> together. Your bodies and minds are relaxed and ready for deep sleep.
+        You completed your <strong>${getEnabledDurationMin()}-minute evening routine</strong> together. Your bodies and minds are relaxed and ready for deep sleep.
       </p>
       <button id="btn-finish-dialog" class="btn-primary-start" style="font-size: 1.05rem; padding: 14px 20px;">
         Head to Bed ✨
