@@ -1,6 +1,6 @@
 {
   "appId": "com.eveningexercise.planner",
-  "appName": "Nocturne Evening Exercise",
+  "appName": "AndiNú Evening Exercise",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

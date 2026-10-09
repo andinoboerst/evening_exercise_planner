@@ -144,7 +144,7 @@ function renderApp() {
           </svg>
         </div>
         <div>
-          <h1 class="brand-title">NOCTURNE</h1>
+          <h1 class="brand-title">AndiNú</h1>
           <div class="brand-subtitle">
             <span>${getEnabledDurationMin()}m Couples Mat Routine</span>
             <span>•</span>
@@ -1296,7 +1296,7 @@ function bindEvents() {
           </button>
         </div>
         <p style="font-size: 0.72rem; color: #94a3b8; line-height: 1.35;">
-          Nocturne will NOT play any 30s preview iframe over your music. You'll hear your full Spotify songs in the background, and your phone will automatically duck the music during coaching cues!
+          AndiNú will NOT play any 30s preview iframe over your music. You'll hear your full Spotify songs in the background, and your phone will automatically duck the music during coaching cues!
         </p>
       </div>
 
@@ -1510,7 +1510,7 @@ function bindEvents() {
           <li>Open <strong>${networkUrl}</strong> in Google Chrome on your Android phone.</li>
           <li>Tap the <strong>Three Dots (⋮)</strong> menu in the upper right.</li>
           <li>Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
-          <li>Tap <strong>Install</strong>. Done! Nocturne will now be on your Android home screen, running full-screen without address bars and keeping your screen awake!</li>
+          <li>Tap <strong>Install</strong>. Done! AndiNú will now be on your Android home screen, running full-screen without address bars and keeping your screen awake!</li>
         </ol>
       </div>
 
@@ -1520,7 +1520,7 @@ function bindEvents() {
           <li>Open the URL in <strong>Safari</strong> on your iPhone.</li>
           <li>Tap the <strong>Share</strong> button (box with an arrow pointing up at the bottom).</li>
           <li>Scroll down and tap <strong>"Add to Home Screen"</strong>.</li>
-          <li>Tap <strong>Add</strong> in the top right. Nocturne is installed on your iOS home screen!</li>
+          <li>Tap <strong>Add</strong> in the top right. AndiNú is installed on your iOS home screen!</li>
         </ol>
       </div>
 

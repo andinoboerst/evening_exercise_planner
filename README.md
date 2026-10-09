@@ -1,4 +1,4 @@
-# Nocturne — 30-Minute Bedtime Floor Mat Routine for Couples
+# AndiNú — 30-Minute Bedtime Floor Mat Routine for Couples
 
 A luxury, partner-synchronized bedtime workout app built for floor mats. It guides couples through a daily 30-minute evening sequence before sleep:
 - **10 min:** Floor-mat Strength & Core Stabilization (planks, push-ups, glute bridges, bird-dog)

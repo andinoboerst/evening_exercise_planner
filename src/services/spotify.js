@@ -119,7 +119,7 @@ class SpotifyService {
       if (this.player || !window.Spotify) return;
       try {
         this.player = new window.Spotify.Player({
-          name: 'Nocturne Web Player',
+          name: 'AndiNú Web Player',
           getOAuthToken: cb => cb(this.token),
           volume: 0.8
         });
