@@ -220,7 +220,7 @@ function renderApp() {
           </button>
         </div>
       </div>
-      <div id="spotify-embed-container" style="margin-top: 8px;">
+      <div id="spotify-embed-container" style="margin-top: 8px; display: ${isSpotifyEmbed() ? 'block' : 'none'};">
         <iframe 
           id="spotify-embed-frame"
           style="border-radius: 12px; border: none;"
@@ -229,7 +229,7 @@ function renderApp() {
           height="80" 
           frameBorder="0" 
           allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
-          loading="eager"
+          loading="lazy"
         ></iframe>
       </div>
     </div>
