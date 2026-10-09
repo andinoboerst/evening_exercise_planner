@@ -31,7 +31,7 @@ let enabledPhases = {
 
 let currentStepIndex = 0;
 let flattenedSteps = [];
-const TIMER_RADIUS = 52; // Compact duo circular timer radius (viewBox 0 0 120 120, cx 60, cy 60)
+const TIMER_RADIUS = 60; // Duo circular timer radius (viewBox 0 0 140 140, cx 70, cy 70)
 
 // Flattened steps calculation for exact timeline
 function buildFlattenedSteps(routine) {
@@ -111,6 +111,7 @@ let settings = {
 
 const isSpotifyApp = () => settings.audioSource === 'spotify-app' || settings.audioSource === 'spotify';
 const isSpotifyEmbed = () => settings.audioSource === 'spotify-embed';
+const isSpotifyAudio = () => settings.audioSource !== 'ambient' && settings.audioSource !== 'silent';
 
 let spotifyEmbedController = null;
 let pendingSpotifyPlay = false;
@@ -222,7 +223,7 @@ function renderApp() {
     </main>
 
     <!-- Persistent Spotify Bedtime Player Dock (Mounted once, never unmounted across routine transitions!) -->
-    <div id="spotify-player-dock" class="spotify-player-dock ${settings.audioSource === 'spotify' ? '' : 'hidden'}">
+    <div id="spotify-player-dock" class="spotify-player-dock ${isSpotifyAudio() ? '' : 'hidden'}">
       <div class="spotify-inapp-header">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span class="spotify-icon-dot">🎧</span>
@@ -245,7 +246,7 @@ function renderApp() {
           </button>
         </div>
       </div>
-      <div id="spotify-embed-container" style="margin-top: 8px; display: ${isSpotifyEmbed() ? 'block' : 'none'};">
+      <div id="spotify-embed-container" style="margin-top: 8px; display: ${isSpotifyAudio() ? 'block' : 'none'};">
         <iframe 
           id="spotify-embed-frame"
           style="border-radius: 12px; border: none;"
@@ -563,17 +564,17 @@ function updateStageUI() {
           </div>
         </div>
 
-        <!-- 2. Duo Hero: Compact Timer & Pose Image Side-by-Side (Saves 350+ vertical px!) -->
+        <!-- 2. Duo Hero: Compact Timer & Pose Image Side-by-Side -->
         <div class="compact-duo-hero">
           <!-- Compact Timer Circle -->
           <div class="compact-timer-box ${isRest ? 'is-rest' : ''}">
-            <svg class="compact-timer-svg" viewBox="0 0 120 120">
-              <circle class="timer-track" cx="60" cy="60" r="${TIMER_RADIUS}"></circle>
+            <svg class="compact-timer-svg" viewBox="0 0 140 140">
+              <circle class="timer-track" cx="70" cy="70" r="${TIMER_RADIUS}"></circle>
               <circle 
                 id="timer-progress-ring"
                 class="timer-progress" 
-                cx="60" 
-                cy="60" 
+                cx="70" 
+                cy="70" 
                 r="${TIMER_RADIUS}"
                 stroke="${isRest ? '#38bdf8' : phaseColor}"
                 stroke-dasharray="${circumference}"
@@ -600,8 +601,8 @@ function updateStageUI() {
             />
             <div class="compact-pose-badge ${isRest ? 'rest-badge' : ''}">
               ${isRest 
-                ? `<span>Up Next: <strong>${upcomingEx ? upcomingEx.name : 'Next Section'}</strong></span>`
-                : `<span>${currentEx.name}</span>`
+                ? `<span class="pose-badge-tag">Up Next:</span><span class="pose-badge-name">${upcomingEx ? upcomingEx.name : 'Next Section'}</span>`
+                : `<span class="pose-badge-name">${currentEx.name}</span>`
               }
             </div>
           </div>
@@ -612,12 +613,14 @@ function updateStageUI() {
           ${isRest ? `
             <!-- REST INTERVAL: Clearly explains upcoming movement to get in position -->
             <div class="compact-rest-panel">
-              <div class="compact-title-row">
-                <span class="rest-tag-badge">💨 Rest & Breathe</span>
+              <div class="compact-title-block">
+                <div class="compact-title-meta">
+                  <span class="rest-tag-badge">💨 Rest & Breathe</span>
+                  ${upcomingEx?.target ? `<span class="compact-target-pill">${upcomingEx.target}</span>` : ''}
+                </div>
                 <h2 class="compact-ex-name rest-highlight">
                   ${upcomingEx ? `Up Next: ${upcomingEx.name}` : 'Phase Complete'}
                 </h2>
-                ${upcomingEx?.target ? `<span class="compact-target-pill">${upcomingEx.target}</span>` : ''}
               </div>
 
               <div class="compact-instructions-card rest-card">
@@ -640,9 +643,12 @@ function updateStageUI() {
           ` : `
             <!-- ACTIVE EXERCISE HOLD -->
             <div class="compact-work-panel">
-              <div class="compact-title-row">
+              <div class="compact-title-block">
+                <div class="compact-title-meta">
+                  <span class="work-tag-badge">Active Hold</span>
+                  <span class="compact-target-pill">${currentEx.target}</span>
+                </div>
                 <h2 class="compact-ex-name">${currentEx.name}</h2>
-                <span class="compact-target-pill">${currentEx.target}</span>
               </div>
 
               <div class="compact-instructions-card">
@@ -661,23 +667,23 @@ function updateStageUI() {
         <!-- 4. Compact Controls Row -->
         <div class="compact-controls-row">
           <button id="btn-prev-step" class="compact-btn compact-btn-nav" title="Previous Step">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
           </button>
 
           <button id="btn-play-pause" class="compact-btn compact-btn-main" title="${isPaused ? 'Resume' : 'Pause'}">
             ${isPaused ? `
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             ` : `
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
             `}
           </button>
 
           <button id="btn-next-step" class="compact-btn compact-btn-nav" title="Skip to Next">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
           </button>
 
           <button id="btn-stop-session" class="compact-btn compact-btn-stop" title="End Routine Early">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect></svg>
             <span>End</span>
           </button>
         </div>
@@ -730,7 +736,7 @@ function updateDockState() {
 
   const embedContainer = document.getElementById('spotify-embed-container');
   if (embedContainer) {
-    embedContainer.style.display = isSpotifyEmbed() ? 'block' : 'none';
+    embedContainer.style.display = isSpotifyAudio() ? 'block' : 'none';
   }
 
   const statusEl = document.getElementById('spotify-dock-status');
@@ -748,7 +754,7 @@ function updateDockState() {
 
   const btnPause = document.getElementById('btn-dock-play-pause');
   if (btnPause) {
-    btnPause.style.display = (isRunning && isSpotifyEmbed()) ? 'inline-flex' : 'none';
+    btnPause.style.display = (isRunning && isSpotifyAudio()) ? 'inline-flex' : 'none';
     btnPause.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
   }
 
@@ -779,7 +785,7 @@ function initSpotifyEmbedController() {
 
       EmbedController.addListener('ready', () => {
         console.log('[Nocturne] Spotify Embed ready for playback');
-        if (pendingSpotifyPlay && isRunning && isSpotifyEmbed()) {
+        if (pendingSpotifyPlay && isRunning && isSpotifyAudio()) {
           EmbedController.play();
           pendingSpotifyPlay = false;
         }
@@ -795,7 +801,7 @@ function initSpotifyEmbedController() {
         }
       });
 
-      if (pendingSpotifyPlay && isRunning && isSpotifyEmbed()) {
+      if (pendingSpotifyPlay && isRunning && isSpotifyAudio()) {
         EmbedController.play();
         pendingSpotifyPlay = false;
       }
@@ -831,17 +837,22 @@ async function startRoutine() {
   audioEngine.playChime('start');
   audioEngine.speak(`Welcome to tonight's bedtime routine. Starting with ${initialStep.phase.title}. First exercise: ${initialStep.exercise.name}.`, true);
 
+  // Update UI into active state WITHOUT tearing down the Spotify dock!
+  document.body.classList.add('routine-active');
+  updateStageUI();
+  updatePhasePills();
+  updateDockState();
+
   // Background Audio / Spotify
-  if (isSpotifyApp()) {
-    // 1. Spotify App Mode (Background Audio)
-    // Never trigger the 30s preview iframe! Leave background Spotify app playing full songs!
+  if (isSpotifyAudio()) {
     audioEngine.stopAmbient();
+    
+    // 1. Play via Web API Connect if authorized
     if (spotifyService.isConnected()) {
-      spotifyService.play();
+      spotifyService.play().catch(e => console.warn('Spotify connect error:', e));
     }
-  } else if (isSpotifyEmbed()) {
-    // 2. Trigger in-app Spotify Iframe Controller (only in Web Mini player mode)
-    audioEngine.stopAmbient();
+
+    // 2. Play via In-App Spotify Embed Controller
     if (spotifyEmbedController) {
       try { 
         spotifyEmbedController.play(); 
@@ -855,21 +866,12 @@ async function startRoutine() {
         frame.src = `${frame.src}${frame.src.includes('?') ? '&' : '?'}autoplay=1`;
       }
     }
-
-    if (spotifyService.isConnected()) {
-      spotifyService.play();
-    }
   } else if (settings.audioSource === 'ambient') {
     audioEngine.startAmbient(settings.ambientSound);
   } else {
     audioEngine.stopAmbient();
   }
 
-  // Update UI into active state WITHOUT tearing down the Spotify dock!
-  document.body.classList.add('routine-active');
-  updateStageUI();
-  updatePhasePills();
-  updateDockState();
   runTimerLoop();
 }
 
@@ -1050,7 +1052,7 @@ function togglePause() {
   isPaused = !isPaused;
   if (isPaused) {
     audioEngine.stopSpeech();
-    if (isSpotifyEmbed() && spotifyEmbedController) {
+    if (isSpotifyAudio() && spotifyEmbedController) {
       try { spotifyEmbedController.pause(); } catch (_) {}
     }
     if (spotifyService.isConnected()) {
@@ -1060,11 +1062,13 @@ function togglePause() {
       audioEngine.stopAmbient();
     }
   } else {
-    if (isSpotifyEmbed() && spotifyEmbedController) {
-      try { spotifyEmbedController.play(); } catch (_) {}
-    }
-    if (spotifyService.isConnected()) {
-      spotifyService.play();
+    if (isSpotifyAudio()) {
+      if (spotifyEmbedController) {
+        try { spotifyEmbedController.play(); } catch (_) {}
+      }
+      if (spotifyService.isConnected()) {
+        spotifyService.play();
+      }
     }
     if (settings.audioSource === 'ambient') {
       audioEngine.startAmbient(settings.ambientSound);
