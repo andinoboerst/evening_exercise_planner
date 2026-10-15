@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS public.recipe_ingredients (
 CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe ON public.recipe_ingredients(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_norm_name ON public.recipe_ingredients(normalized_name);
 
+DROP TRIGGER IF EXISTS trg_normalize_recipe_ingredient ON public.recipe_ingredients;
 CREATE TRIGGER trg_normalize_recipe_ingredient
   BEFORE INSERT OR UPDATE ON public.recipe_ingredients
   FOR EACH ROW EXECUTE FUNCTION public.normalize_ingredient_name();
@@ -138,6 +139,7 @@ CREATE TABLE IF NOT EXISTS public.pantry_items (
 
 CREATE INDEX IF NOT EXISTS idx_pantry_items_household_stock ON public.pantry_items(household_id, in_stock);
 
+DROP TRIGGER IF EXISTS trg_normalize_pantry_ingredient ON public.pantry_items;
 CREATE TRIGGER trg_normalize_pantry_ingredient
   BEFORE INSERT OR UPDATE ON public.pantry_items
   FOR EACH ROW EXECUTE FUNCTION public.normalize_ingredient_name();
@@ -305,16 +307,19 @@ ALTER TABLE public.list_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.list_items ENABLE ROW LEVEL SECURITY;
 
 -- Households Policies
+DROP POLICY IF EXISTS "Households viewable by members" ON public.households;
 CREATE POLICY "Households viewable by members"
   ON public.households FOR SELECT
   USING (id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Households modifiable by members" ON public.households;
 CREATE POLICY "Households modifiable by members"
   ON public.households FOR ALL
   USING (id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (id IN (SELECT public.current_user_household_ids()));
 
 -- Household Members Policies
+DROP POLICY IF EXISTS "Members viewable by household members or matching email" ON public.household_members;
 CREATE POLICY "Members viewable by household members or matching email"
   ON public.household_members FOR SELECT
   USING (
@@ -322,6 +327,7 @@ CREATE POLICY "Members viewable by household members or matching email"
     OR lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
 
+DROP POLICY IF EXISTS "Members insertable by household members" ON public.household_members;
 CREATE POLICY "Members insertable by household members"
   ON public.household_members FOR INSERT
   WITH CHECK (
@@ -329,149 +335,182 @@ CREATE POLICY "Members insertable by household members"
     OR NOT EXISTS (SELECT 1 FROM public.household_members WHERE household_id = household_members.household_id)
   );
 
+DROP POLICY IF EXISTS "Members modifiable by household members" ON public.household_members;
 CREATE POLICY "Members modifiable by household members"
   ON public.household_members FOR UPDATE
   USING (household_id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Members deletable by household members" ON public.household_members;
 CREATE POLICY "Members deletable by household members"
   ON public.household_members FOR DELETE
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
 -- Recipes Policies
+DROP POLICY IF EXISTS "Recipes viewable by household" ON public.recipes;
 CREATE POLICY "Recipes viewable by household"
   ON public.recipes FOR SELECT
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Recipes insertable by household" ON public.recipes;
 CREATE POLICY "Recipes insertable by household"
   ON public.recipes FOR INSERT
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Recipes updatable by household" ON public.recipes;
 CREATE POLICY "Recipes updatable by household"
   ON public.recipes FOR UPDATE
   USING (household_id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Recipes deletable by household" ON public.recipes;
 CREATE POLICY "Recipes deletable by household"
   ON public.recipes FOR DELETE
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
 -- Recipe Ingredients Policies
+DROP POLICY IF EXISTS "Recipe ingredients viewable by household" ON public.recipe_ingredients;
 CREATE POLICY "Recipe ingredients viewable by household"
   ON public.recipe_ingredients FOR SELECT
   USING (recipe_id IN (SELECT id FROM public.recipes WHERE household_id IN (SELECT public.current_user_household_ids())));
 
+DROP POLICY IF EXISTS "Recipe ingredients insertable by household" ON public.recipe_ingredients;
 CREATE POLICY "Recipe ingredients insertable by household"
   ON public.recipe_ingredients FOR INSERT
   WITH CHECK (recipe_id IN (SELECT id FROM public.recipes WHERE household_id IN (SELECT public.current_user_household_ids())));
 
+DROP POLICY IF EXISTS "Recipe ingredients updatable by household" ON public.recipe_ingredients;
 CREATE POLICY "Recipe ingredients updatable by household"
   ON public.recipe_ingredients FOR UPDATE
   USING (recipe_id IN (SELECT id FROM public.recipes WHERE household_id IN (SELECT public.current_user_household_ids())));
 
+DROP POLICY IF EXISTS "Recipe ingredients deletable by household" ON public.recipe_ingredients;
 CREATE POLICY "Recipe ingredients deletable by household"
   ON public.recipe_ingredients FOR DELETE
   USING (recipe_id IN (SELECT id FROM public.recipes WHERE household_id IN (SELECT public.current_user_household_ids())));
 
 -- Pantry Items Policies
+DROP POLICY IF EXISTS "Pantry viewable by household" ON public.pantry_items;
 CREATE POLICY "Pantry viewable by household"
   ON public.pantry_items FOR SELECT
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Pantry insertable by household" ON public.pantry_items;
 CREATE POLICY "Pantry insertable by household"
   ON public.pantry_items FOR INSERT
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Pantry updatable by household" ON public.pantry_items;
 CREATE POLICY "Pantry updatable by household"
   ON public.pantry_items FOR UPDATE
   USING (household_id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Pantry deletable by household" ON public.pantry_items;
 CREATE POLICY "Pantry deletable by household"
   ON public.pantry_items FOR DELETE
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
 -- Meal Plans Policies
+DROP POLICY IF EXISTS "Meal plans viewable by household" ON public.meal_plans;
 CREATE POLICY "Meal plans viewable by household"
   ON public.meal_plans FOR SELECT
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Meal plans insertable by household" ON public.meal_plans;
 CREATE POLICY "Meal plans insertable by household"
   ON public.meal_plans FOR INSERT
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Meal plans updatable by household" ON public.meal_plans;
 CREATE POLICY "Meal plans updatable by household"
   ON public.meal_plans FOR UPDATE
   USING (household_id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Meal plans deletable by household" ON public.meal_plans;
 CREATE POLICY "Meal plans deletable by household"
   ON public.meal_plans FOR DELETE
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
 -- Meal Plan Days Policies
+DROP POLICY IF EXISTS "Meal plan days viewable by household" ON public.meal_plan_days;
 CREATE POLICY "Meal plan days viewable by household"
   ON public.meal_plan_days FOR SELECT
   USING (meal_plan_id IN (SELECT id FROM public.meal_plans WHERE household_id IN (SELECT public.current_user_household_ids())));
 
+DROP POLICY IF EXISTS "Meal plan days insertable by household" ON public.meal_plan_days;
 CREATE POLICY "Meal plan days insertable by household"
   ON public.meal_plan_days FOR INSERT
   WITH CHECK (meal_plan_id IN (SELECT id FROM public.meal_plans WHERE household_id IN (SELECT public.current_user_household_ids())));
 
+DROP POLICY IF EXISTS "Meal plan days updatable by household" ON public.meal_plan_days;
 CREATE POLICY "Meal plan days updatable by household"
   ON public.meal_plan_days FOR UPDATE
   USING (meal_plan_id IN (SELECT id FROM public.meal_plans WHERE household_id IN (SELECT public.current_user_household_ids())));
 
+DROP POLICY IF EXISTS "Meal plan days deletable by household" ON public.meal_plan_days;
 CREATE POLICY "Meal plan days deletable by household"
   ON public.meal_plan_days FOR DELETE
   USING (meal_plan_id IN (SELECT id FROM public.meal_plans WHERE household_id IN (SELECT public.current_user_household_ids())));
 
 -- Meal Shopping Items Policies
+DROP POLICY IF EXISTS "Shopping items viewable by household" ON public.meal_shopping_items;
 CREATE POLICY "Shopping items viewable by household"
   ON public.meal_shopping_items FOR SELECT
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Shopping items insertable by household" ON public.meal_shopping_items;
 CREATE POLICY "Shopping items insertable by household"
   ON public.meal_shopping_items FOR INSERT
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Shopping items updatable by household" ON public.meal_shopping_items;
 CREATE POLICY "Shopping items updatable by household"
   ON public.meal_shopping_items FOR UPDATE
   USING (household_id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "Shopping items deletable by household" ON public.meal_shopping_items;
 CREATE POLICY "Shopping items deletable by household"
   ON public.meal_shopping_items FOR DELETE
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
 -- List Categories Policies
+DROP POLICY IF EXISTS "List categories viewable by household" ON public.list_categories;
 CREATE POLICY "List categories viewable by household"
   ON public.list_categories FOR SELECT
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "List categories insertable by household" ON public.list_categories;
 CREATE POLICY "List categories insertable by household"
   ON public.list_categories FOR INSERT
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "List categories updatable by household" ON public.list_categories;
 CREATE POLICY "List categories updatable by household"
   ON public.list_categories FOR UPDATE
   USING (household_id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
 -- List Items Policies
+DROP POLICY IF EXISTS "List items viewable by household" ON public.list_items;
 CREATE POLICY "List items viewable by household"
   ON public.list_items FOR SELECT
   USING (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "List items insertable by household" ON public.list_items;
 CREATE POLICY "List items insertable by household"
   ON public.list_items FOR INSERT
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "List items updatable by household" ON public.list_items;
 CREATE POLICY "List items updatable by household"
   ON public.list_items FOR UPDATE
   USING (household_id IN (SELECT public.current_user_household_ids()))
   WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
 
+DROP POLICY IF EXISTS "List items deletable by household" ON public.list_items;
 CREATE POLICY "List items deletable by household"
   ON public.list_items FOR DELETE
   USING (household_id IN (SELECT public.current_user_household_ids()));
@@ -533,4 +572,51 @@ BEGIN
   RETURN v_household_id;
 END;
 $$;
+
+-- ==============================================================================
+-- 7. ENSURE ALL PRIMARY KEY ID COLUMNS HAVE DEFAULT gen_random_uuid()
+-- ==============================================================================
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'list_items' AND column_name = 'id') THEN
+    ALTER TABLE public.list_items ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'list_categories' AND column_name = 'id') THEN
+    ALTER TABLE public.list_categories ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'meal_shopping_items' AND column_name = 'id') THEN
+    ALTER TABLE public.meal_shopping_items ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pantry_items' AND column_name = 'id') THEN
+    ALTER TABLE public.pantry_items ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'recipes' AND column_name = 'id') THEN
+    ALTER TABLE public.recipes ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'recipe_ingredients' AND column_name = 'id') THEN
+    ALTER TABLE public.recipe_ingredients ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'meal_plans' AND column_name = 'id') THEN
+    ALTER TABLE public.meal_plans ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'meal_plan_days' AND column_name = 'id') THEN
+    ALTER TABLE public.meal_plan_days ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'households' AND column_name = 'id') THEN
+    ALTER TABLE public.households ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'household_members' AND column_name = 'id') THEN
+    ALTER TABLE public.household_members ALTER COLUMN id SET DEFAULT gen_random_uuid();
+  END IF;
+END $$;
 
