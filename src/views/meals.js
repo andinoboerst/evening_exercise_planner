@@ -37,6 +37,82 @@ export async function mountMeals(container, navigate) {
     6: 'healthy'
   };
 
+  // Starter Curated Recipes with valid UUIDs
+  const STARTER_RECIPES = [
+    {
+      id: 'b1000000-0000-0000-0000-000000000001',
+      title: 'Spaghetti Aglio, Olio e Peperoncino',
+      description: 'Classic Roman garlic, chili flakes, and golden olive oil pasta.',
+      instructions: 'Cook spaghetti al dente. In a pan, gently infuse olive oil with sliced garlic and red pepper flakes. Toss pasta with emulsion of pasta water. Top with parsley & parmesan.',
+      prep_time_minutes: 15,
+      tags: ['quick', 'pasta', 'comfort', 'vegetarian'],
+      recipe_ingredients: [
+        { ingredient_name: 'Spaghetti', normalized_name: 'spaghetti', quantity: 250, unit: 'g', category: 'Dry Goods' },
+        { ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 4, unit: 'tbsp', category: 'Pantry' },
+        { ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 4, unit: 'cloves', category: 'Produce' },
+        { ingredient_name: 'Red Chili Flakes', normalized_name: 'red chili flakes', quantity: 1, unit: 'tsp', category: 'Spices' },
+        { ingredient_name: 'Parmesan Cheese', normalized_name: 'parmesan cheese', quantity: 40, unit: 'g', category: 'Dairy' }
+      ]
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000002',
+      title: 'Mediterranean Chickpea & Avocado Bowl',
+      description: 'Crisp cucumbers, cherry tomatoes, creamy avocado, and lemon herb chickpeas.',
+      instructions: 'Rinse chickpeas. Chop cucumbers, tomatoes, and avocado. Toss with olive oil, lemon juice, salt, and crumbled feta.',
+      prep_time_minutes: 20,
+      tags: ['quick', 'healthy', 'vegetarian', 'salad'],
+      recipe_ingredients: [
+        { ingredient_name: 'Canned Chickpeas', normalized_name: 'canned chickpeas', quantity: 1, unit: 'can', category: 'Canned Goods' },
+        { ingredient_name: 'Avocado', normalized_name: 'avocado', quantity: 1, unit: 'whole', category: 'Produce' },
+        { ingredient_name: 'Cherry Tomatoes', normalized_name: 'cherry tomatoes', quantity: 150, unit: 'g', category: 'Produce' },
+        { ingredient_name: 'Cucumber', normalized_name: 'cucumber', quantity: 1, unit: 'whole', category: 'Produce' },
+        { ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 2, unit: 'tbsp', category: 'Pantry' },
+        { ingredient_name: 'Lemon', normalized_name: 'lemon', quantity: 1, unit: 'whole', category: 'Produce' }
+      ]
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000003',
+      title: 'Sheet Pan Salmon & Roasted Greens',
+      description: 'Tender honey-dijon glazed salmon fillets with broccolini and baby potatoes.',
+      instructions: 'Roast halved potatoes 15 min at 200C. Add salmon fillets brushed with mustard-honey glaze and broccolini. Roast 12-14 min until tender.',
+      prep_time_minutes: 30,
+      tags: ['healthy', 'weekend', 'high-protein'],
+      recipe_ingredients: [
+        { ingredient_name: 'Salmon Fillets', normalized_name: 'salmon fillets', quantity: 2, unit: 'fillets', category: 'Meat & Seafood' },
+        { ingredient_name: 'Broccolini', normalized_name: 'broccolini', quantity: 200, unit: 'g', category: 'Produce' },
+        { ingredient_name: 'Baby Potatoes', normalized_name: 'baby potatoes', quantity: 300, unit: 'g', category: 'Produce' },
+        { ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 2, unit: 'tbsp', category: 'Pantry' },
+        { ingredient_name: 'Dijon Mustard', normalized_name: 'dijon mustard', quantity: 1, unit: 'tbsp', category: 'Condiments' }
+      ]
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000004',
+      title: 'Creamy Tomato & Basil Penne',
+      description: 'Rich tomato cream sauce infused with garlic, shallots, and fresh basil.',
+      instructions: 'Saute garlic and shallots in butter. Pour in tomato passata and simmer. Stir in heavy cream and parmesan. Fold in boiled penne and fresh basil.',
+      prep_time_minutes: 20,
+      tags: ['pasta', 'comfort', 'quick', 'vegetarian'],
+      recipe_ingredients: [
+        { ingredient_name: 'Penne', normalized_name: 'penne', quantity: 250, unit: 'g', category: 'Dry Goods' },
+        { ingredient_name: 'Tomato Passata', normalized_name: 'tomato passata', quantity: 400, unit: 'g', category: 'Canned Goods' },
+        { ingredient_name: 'Heavy Cream', normalized_name: 'heavy cream', quantity: 100, unit: 'ml', category: 'Dairy' },
+        { ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 3, unit: 'cloves', category: 'Produce' },
+        { ingredient_name: 'Fresh Basil', normalized_name: 'fresh basil', quantity: 1, unit: 'handful', category: 'Produce' }
+      ]
+    }
+  ];
+
+  // Starter Pantry items with valid UUIDs
+  const STARTER_PANTRY = [
+    { id: 'p1000000-0000-0000-0000-000000000001', ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 1, unit: 'bottle', in_stock: true, category: 'Pantry' },
+    { id: 'p1000000-0000-0000-0000-000000000002', ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 4, unit: 'cloves', in_stock: true, category: 'Produce' },
+    { id: 'p1000000-0000-0000-0000-000000000003', ingredient_name: 'Spaghetti', normalized_name: 'spaghetti', quantity: 500, unit: 'g', in_stock: true, category: 'Dry Goods' },
+    { id: 'p1000000-0000-0000-0000-000000000004', ingredient_name: 'Red Chili Flakes', normalized_name: 'red chili flakes', quantity: 1, unit: 'jar', in_stock: true, category: 'Spices' },
+    { id: 'p1000000-0000-0000-0000-000000000005', ingredient_name: 'Parmesan Cheese', normalized_name: 'parmesan cheese', quantity: 100, unit: 'g', in_stock: true, category: 'Dairy' },
+    { id: 'p1000000-0000-0000-0000-000000000006', ingredient_name: 'Salmon Fillets', normalized_name: 'salmon fillets', quantity: 2, unit: 'fillets', in_stock: false, category: 'Meat & Seafood' },
+    { id: 'p1000000-0000-0000-0000-000000000007', ingredient_name: 'Avocado', normalized_name: 'avocado', quantity: 2, unit: 'whole', in_stock: false, category: 'Produce' }
+  ];
+
   // Local storage cache keys for offline/demo
   const STORAGE_RECIPES_KEY = 'andinu_cache_recipes';
   const STORAGE_PANTRY_KEY = 'andinu_cache_pantry';
@@ -47,23 +123,75 @@ export async function mountMeals(container, navigate) {
     if (isSupabaseConfigured && household?.id) {
       try {
         // 1. Load Recipes with Ingredients
-        const { data: recs } = await supabase
+        const { data: recs, error: recsErr } = await supabase
           .from('recipes')
           .select('*, recipe_ingredients(*)')
           .order('title');
 
-        if (recs && recs.length > 0) {
+        if (!recsErr && recs && recs.length > 0) {
           recipes = recs;
+        } else if (!recsErr) {
+          // Auto-seed starter recipes into Supabase for this household
+          for (const sr of STARTER_RECIPES) {
+            const recipeId = generateUUID();
+            const { data: created } = await supabase
+              .from('recipes')
+              .insert([{
+                id: recipeId,
+                household_id: household.id,
+                title: sr.title,
+                description: sr.description,
+                instructions: sr.instructions,
+                prep_time_minutes: sr.prep_time_minutes,
+                tags: sr.tags
+              }])
+              .select()
+              .single();
+
+            if (created) {
+              const ingPayload = sr.recipe_ingredients.map(ing => ({
+                id: generateUUID(),
+                recipe_id: created.id,
+                ingredient_name: ing.ingredient_name,
+                normalized_name: ing.normalized_name,
+                quantity: ing.quantity,
+                unit: ing.unit,
+                category: ing.category
+              }));
+              await supabase.from('recipe_ingredients').insert(ingPayload);
+              created.recipe_ingredients = ingPayload;
+              recipes.push(created);
+            }
+          }
         }
 
         // 2. Load Pantry Items
-        const { data: pantry } = await supabase
+        const { data: pantry, error: pantryErr } = await supabase
           .from('pantry_items')
           .select('*')
           .order('ingredient_name');
 
-        if (pantry) {
+        if (!pantryErr && pantry && pantry.length > 0) {
           pantryItems = pantry;
+        } else if (!pantryErr) {
+          // Auto-seed starter pantry items into Supabase for this household
+          const pantryPayload = STARTER_PANTRY.map(p => ({
+            id: generateUUID(),
+            household_id: household.id,
+            ingredient_name: p.ingredient_name,
+            normalized_name: p.normalized_name,
+            quantity: p.quantity,
+            unit: p.unit,
+            in_stock: p.in_stock,
+            category: p.category
+          }));
+          const { data: createdPantry } = await supabase
+            .from('pantry_items')
+            .insert(pantryPayload)
+            .select();
+          if (createdPantry) {
+            pantryItems = createdPantry;
+          }
         }
 
         // 3. Load Current Week's Meal Plan
@@ -107,7 +235,9 @@ export async function mountMeals(container, navigate) {
             .eq('meal_plan_id', plan.id)
             .order('day_of_week');
 
-          planDays = days || [];
+          if (days && days.length > 0) {
+            planDays = days;
+          }
         }
 
         // 4. Load Shopping Items
@@ -125,111 +255,31 @@ export async function mountMeals(container, navigate) {
       }
     }
 
-    // Fallback Mock Data for immediate offline/demo preview
+    // Fallbacks for offline/mock mode
     if (recipes.length === 0) {
       const cached = localStorage.getItem(STORAGE_RECIPES_KEY);
-      if (cached) {
-        recipes = JSON.parse(cached);
-      } else {
-        recipes = [
-          {
-            id: 'r1',
-            title: 'Spaghetti Aglio, Olio e Peperoncino',
-            description: 'Classic Roman garlic, chili flakes, and golden olive oil pasta.',
-            instructions: 'Cook spaghetti al dente. In a pan, gently infuse olive oil with sliced garlic and red pepper flakes. Toss pasta with emulsion of pasta water. Top with parsley & parmesan.',
-            prep_time_minutes: 15,
-            tags: ['quick', 'pasta', 'comfort', 'vegetarian'],
-            recipe_ingredients: [
-              { ingredient_name: 'Spaghetti', normalized_name: 'spaghetti', quantity: 250, unit: 'g', category: 'Dry Goods' },
-              { ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 4, unit: 'tbsp', category: 'Pantry' },
-              { ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 4, unit: 'cloves', category: 'Produce' },
-              { ingredient_name: 'Red Chili Flakes', normalized_name: 'red chili flakes', quantity: 1, unit: 'tsp', category: 'Spices' },
-              { ingredient_name: 'Parmesan Cheese', normalized_name: 'parmesan cheese', quantity: 40, unit: 'g', category: 'Dairy' }
-            ]
-          },
-          {
-            id: 'r2',
-            title: 'Mediterranean Chickpea & Avocado Bowl',
-            description: 'Crisp cucumbers, cherry tomatoes, creamy avocado, and lemon herb chickpeas.',
-            instructions: 'Rinse chickpeas. Chop cucumbers, tomatoes, and avocado. Toss with olive oil, lemon juice, salt, and crumbled feta.',
-            prep_time_minutes: 20,
-            tags: ['quick', 'healthy', 'vegetarian', 'salad'],
-            recipe_ingredients: [
-              { ingredient_name: 'Canned Chickpeas', normalized_name: 'canned chickpeas', quantity: 1, unit: 'can', category: 'Canned Goods' },
-              { ingredient_name: 'Avocado', normalized_name: 'avocado', quantity: 1, unit: 'whole', category: 'Produce' },
-              { ingredient_name: 'Cherry Tomatoes', normalized_name: 'cherry tomatoes', quantity: 150, unit: 'g', category: 'Produce' },
-              { ingredient_name: 'Cucumber', normalized_name: 'cucumber', quantity: 1, unit: 'whole', category: 'Produce' },
-              { ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 2, unit: 'tbsp', category: 'Pantry' },
-              { ingredient_name: 'Lemon', normalized_name: 'lemon', quantity: 1, unit: 'whole', category: 'Produce' }
-            ]
-          },
-          {
-            id: 'r3',
-            title: 'Sheet Pan Salmon & Roasted Greens',
-            description: 'Tender honey-dijon glazed salmon fillets with broccolini and baby potatoes.',
-            instructions: 'Roast halved potatoes 15 min at 200C. Add salmon fillets brushed with mustard-honey glaze and broccolini. Roast 12-14 min until tender.',
-            prep_time_minutes: 30,
-            tags: ['healthy', 'weekend', 'high-protein'],
-            recipe_ingredients: [
-              { ingredient_name: 'Salmon Fillets', normalized_name: 'salmon fillets', quantity: 2, unit: 'fillets', category: 'Meat & Seafood' },
-              { ingredient_name: 'Broccolini', normalized_name: 'broccolini', quantity: 200, unit: 'g', category: 'Produce' },
-              { ingredient_name: 'Baby Potatoes', normalized_name: 'baby potatoes', quantity: 300, unit: 'g', category: 'Produce' },
-              { ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 2, unit: 'tbsp', category: 'Pantry' },
-              { ingredient_name: 'Dijon Mustard', normalized_name: 'dijon mustard', quantity: 1, unit: 'tbsp', category: 'Condiments' }
-            ]
-          },
-          {
-            id: 'r4',
-            title: 'Creamy Tomato & Basil Penne',
-            description: 'Rich tomato cream sauce infused with garlic, shallots, and fresh basil.',
-            instructions: 'Saute garlic and shallots in butter. Pour in tomato passata and simmer. Stir in heavy cream and parmesan. Fold in boiled penne and fresh basil.',
-            prep_time_minutes: 20,
-            tags: ['pasta', 'comfort', 'quick', 'vegetarian'],
-            recipe_ingredients: [
-              { ingredient_name: 'Penne', normalized_name: 'penne', quantity: 250, unit: 'g', category: 'Dry Goods' },
-              { ingredient_name: 'Tomato Passata', normalized_name: 'tomato passata', quantity: 400, unit: 'g', category: 'Canned Goods' },
-              { ingredient_name: 'Heavy Cream', normalized_name: 'heavy cream', quantity: 100, unit: 'ml', category: 'Dairy' },
-              { ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 3, unit: 'cloves', category: 'Produce' },
-              { ingredient_name: 'Fresh Basil', normalized_name: 'fresh basil', quantity: 1, unit: 'handful', category: 'Produce' }
-            ]
-          }
-        ];
-        localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(recipes));
-      }
+      recipes = cached ? JSON.parse(cached) : [...STARTER_RECIPES];
     }
 
     if (pantryItems.length === 0) {
       const cachedPantry = localStorage.getItem(STORAGE_PANTRY_KEY);
-      if (cachedPantry) {
-        pantryItems = JSON.parse(cachedPantry);
-      } else {
-        pantryItems = [
-          { id: 'p1', ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 1, unit: 'bottle', in_stock: true, category: 'Pantry' },
-          { id: 'p2', ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 4, unit: 'cloves', in_stock: true, category: 'Produce' },
-          { id: 'p3', ingredient_name: 'Spaghetti', normalized_name: 'spaghetti', quantity: 500, unit: 'g', in_stock: true, category: 'Dry Goods' },
-          { id: 'p4', ingredient_name: 'Red Chili Flakes', normalized_name: 'red chili flakes', quantity: 1, unit: 'jar', in_stock: true, category: 'Spices' },
-          { id: 'p5', ingredient_name: 'Parmesan Cheese', normalized_name: 'parmesan cheese', quantity: 100, unit: 'g', in_stock: true, category: 'Dairy' },
-          { id: 'p6', ingredient_name: 'Salmon Fillets', normalized_name: 'salmon fillets', quantity: 2, unit: 'fillets', in_stock: false, category: 'Meat & Seafood' },
-          { id: 'p7', ingredient_name: 'Avocado', normalized_name: 'avocado', quantity: 2, unit: 'whole', in_stock: false, category: 'Produce' }
-        ];
-        localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
-      }
+      pantryItems = cachedPantry ? JSON.parse(cachedPantry) : [...STARTER_PANTRY];
     }
 
-    if (planDays.length === 0 && !isSupabaseConfigured) {
+    if (planDays.length === 0) {
       const cachedDays = localStorage.getItem(STORAGE_PLAN_DAYS_KEY);
       if (cachedDays) {
         planDays = JSON.parse(cachedDays);
       } else {
         planDays = DAYS_OF_WEEK.map((d, i) => ({
-          id: `plan-day-${d.index}`,
+          id: generateUUID(),
+          meal_plan_id: activePlan?.id || null,
           day_of_week: d.index,
           recipe_id: recipes[i % recipes.length]?.id,
           recipes: recipes[i % recipes.length],
           requested_tag: requestedTags[d.index] || 'quick',
           is_cooked: false
         }));
-        localStorage.setItem(STORAGE_PLAN_DAYS_KEY, JSON.stringify(planDays));
       }
     }
   }
@@ -434,6 +484,12 @@ export async function mountMeals(container, navigate) {
     const checkedCount = shoppingItems.filter(s => s.is_checked).length;
     const totalCount = shoppingItems.length;
 
+    // Sort pending items first, completed below
+    const sortedShopping = [...shoppingItems].sort((a, b) => {
+      if (a.is_checked !== b.is_checked) return a.is_checked ? 1 : -1;
+      return (a.ingredient_name || '').localeCompare(b.ingredient_name || '');
+    });
+
     return `
       <div class="shopping-view">
         <div class="shopping-header glass-panel">
@@ -478,9 +534,9 @@ export async function mountMeals(container, navigate) {
 
         <!-- Shopping Items List -->
         <div class="shopping-items-stack">
-          ${shoppingItems.length > 0 ? `
+          ${sortedShopping.length > 0 ? `
             <div class="items-stack">
-              ${shoppingItems.map(item => `
+              ${sortedShopping.map(item => `
                 <div class="item-card glass-panel ${item.is_checked ? 'is-completed' : ''}" data-shop-id="${item.id}">
                   <label class="custom-checkbox-wrap">
                     <input 
@@ -515,6 +571,9 @@ export async function mountMeals(container, navigate) {
               <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
                 Click "Auto-Fill Missing from Plan" above to calculate all missing ingredients across the week's dinners.
               </p>
+              <button id="btn-auto-calc-shopping-empty" class="btn-primary-start" style="width: auto; padding: 10px 20px; font-size: 0.88rem; margin-top: 14px;">
+                ⚡ Auto-Fill Missing from Plan
+              </button>
             </div>
           `}
         </div>
@@ -742,55 +801,7 @@ export async function mountMeals(container, navigate) {
         const btn = container.querySelector('#btn-generate-plan');
         if (btn) btn.textContent = 'Generating...';
 
-        // Pantry-optimizing assignment
-        const newPlanDays = DAYS_OF_WEEK.map(d => {
-          const reqTag = requestedTags[d.index] || 'quick';
-          // Sort recipes by composite pantry coverage + tag score
-          const sorted = [...recipes].sort((a, b) => {
-            const scoreB = scoreRecipeForPantry(b, reqTag).score;
-            const scoreA = scoreRecipeForPantry(a, reqTag).score;
-            return scoreB - scoreA;
-          });
-
-          // Avoid repeating the exact same recipe consecutively if possible
-          const bestRecipe = sorted[d.index % sorted.length] || sorted[0];
-
-          return {
-            id: `plan-day-${d.index}`,
-            meal_plan_id: activePlan?.id,
-            day_of_week: d.index,
-            recipe_id: bestRecipe.id,
-            recipes: bestRecipe,
-            requested_tag: reqTag,
-            is_cooked: false
-          };
-        });
-
-        planDays = newPlanDays;
-
-        if (isSupabaseConfigured && activePlan?.id) {
-          try {
-            await supabase.from('meal_plan_days').delete().eq('meal_plan_id', activePlan.id);
-            const { error: insErr } = await supabase.from('meal_plan_days').insert(
-              newPlanDays.map(p => ({
-                id: generateUUID(),
-                meal_plan_id: activePlan.id,
-                day_of_week: p.day_of_week,
-                recipe_id: p.recipe_id,
-                requested_tag: p.requested_tag,
-                is_cooked: false
-              }))
-            );
-            if (insErr) {
-              console.warn('Error saving plan days to Supabase:', insErr);
-            }
-          } catch (e) {
-            console.warn('Error saving plan to Supabase:', e);
-          }
-        } else {
-          localStorage.setItem(STORAGE_PLAN_DAYS_KEY, JSON.stringify(planDays));
-        }
-
+        await generateWeeklyPlanInternal();
         render();
       });
 
@@ -817,17 +828,28 @@ export async function mountMeals(container, navigate) {
           const chosenRecipe = recipes.find(r => r.id === chosenRecipeId);
           if (!chosenRecipe) return;
 
-          const targetDay = planDays.find(p => p.day_of_week === dIdx);
+          let targetDay = planDays.find(p => p.day_of_week === dIdx);
           if (targetDay) {
             targetDay.recipe_id = chosenRecipeId;
             targetDay.recipes = chosenRecipe;
+          } else {
+            targetDay = {
+              id: generateUUID(),
+              meal_plan_id: activePlan?.id || null,
+              day_of_week: dIdx,
+              recipe_id: chosenRecipeId,
+              recipes: chosenRecipe,
+              requested_tag: requestedTags[dIdx] || 'quick',
+              is_cooked: false
+            };
+            planDays.push(targetDay);
           }
 
           if (isSupabaseConfigured && activePlan?.id) {
             await supabase
               .from('meal_plan_days')
               .upsert({
-                id: targetDay?.id && !targetDay.id.startsWith('plan-day-') ? targetDay.id : generateUUID(),
+                id: targetDay.id && !targetDay.id.startsWith('plan-day-') ? targetDay.id : generateUUID(),
                 meal_plan_id: activePlan.id,
                 day_of_week: dIdx,
                 recipe_id: chosenRecipeId
@@ -868,10 +890,16 @@ export async function mountMeals(container, navigate) {
     // 2. Shopping List Events
     if (activeTab === 'shopping') {
       // Auto-calc missing ingredients from weekly plan
-      container.querySelector('#btn-auto-calc-shopping')?.addEventListener('click', async () => {
+      const handleAutoCalc = async () => {
+        const btn = container.querySelector('#btn-auto-calc-shopping');
+        const emptyBtn = container.querySelector('#btn-auto-calc-shopping-empty');
+        if (btn) btn.textContent = 'Calculating...';
+        if (emptyBtn) emptyBtn.textContent = 'Calculating...';
         await autoGenerateShoppingList();
-        render();
-      });
+      };
+
+      container.querySelector('#btn-auto-calc-shopping')?.addEventListener('click', handleAutoCalc);
+      container.querySelector('#btn-auto-calc-shopping-empty')?.addEventListener('click', handleAutoCalc);
 
       // Clear checked items
       container.querySelector('#btn-clear-checked-shopping')?.addEventListener('click', async () => {
@@ -1095,8 +1123,9 @@ export async function mountMeals(container, navigate) {
           category: 'Other'
         }));
 
+        const recipeId = generateUUID();
         const newRecipe = {
-          id: isSupabaseConfigured ? undefined : `rec-${Date.now()}`,
+          id: recipeId,
           household_id: household.id,
           title,
           description: desc,
@@ -1110,6 +1139,7 @@ export async function mountMeals(container, navigate) {
           const { data: created, error } = await supabase
             .from('recipes')
             .insert([{
+              id: recipeId,
               household_id: household.id,
               title,
               description: desc,
@@ -1122,7 +1152,11 @@ export async function mountMeals(container, navigate) {
 
           if (!error && created) {
             if (parsedIngs.length > 0) {
-              const ingPayload = parsedIngs.map(i => ({ ...i, recipe_id: created.id }));
+              const ingPayload = parsedIngs.map(i => ({
+                id: generateUUID(),
+                ...i,
+                recipe_id: created.id
+              }));
               await supabase.from('recipe_ingredients').insert(ingPayload);
               created.recipe_ingredients = ingPayload;
             }
@@ -1158,17 +1192,76 @@ export async function mountMeals(container, navigate) {
     }
   }
 
+  // Helper to generate and persist weekly meal assignments
+  async function generateWeeklyPlanInternal() {
+    if (recipes.length === 0) return [];
+
+    const newPlanDays = DAYS_OF_WEEK.map(d => {
+      const reqTag = requestedTags[d.index] || 'quick';
+      const sorted = [...recipes].sort((a, b) => {
+        const scoreB = scoreRecipeForPantry(b, reqTag).score;
+        const scoreA = scoreRecipeForPantry(a, reqTag).score;
+        return scoreB - scoreA;
+      });
+
+      const bestRecipe = sorted[d.index % sorted.length] || sorted[0];
+
+      return {
+        id: generateUUID(),
+        meal_plan_id: activePlan?.id || null,
+        day_of_week: d.index,
+        recipe_id: bestRecipe.id,
+        recipes: bestRecipe,
+        requested_tag: reqTag,
+        is_cooked: false
+      };
+    });
+
+    planDays = newPlanDays;
+
+    if (isSupabaseConfigured && activePlan?.id) {
+      try {
+        await supabase.from('meal_plan_days').delete().eq('meal_plan_id', activePlan.id);
+        const { error: insErr } = await supabase.from('meal_plan_days').insert(
+          newPlanDays.map(p => ({
+            id: p.id,
+            meal_plan_id: activePlan.id,
+            day_of_week: p.day_of_week,
+            recipe_id: p.recipe_id,
+            requested_tag: p.requested_tag,
+            is_cooked: false
+          }))
+        );
+        if (insErr) {
+          console.warn('Error saving plan days to Supabase:', insErr);
+        }
+      } catch (e) {
+        console.warn('Error saving plan to Supabase:', e);
+      }
+    } else {
+      localStorage.setItem(STORAGE_PLAN_DAYS_KEY, JSON.stringify(planDays));
+    }
+
+    return newPlanDays;
+  }
+
   // Auto-generation logic for Shopping List
-  async function autoGenerateShoppingList() {
+  async function autoGenerateShoppingList(forceAllPlanIngredients = false) {
     const needed = new Map();
+
+    // 1. Ensure weekly dinners are assigned
+    const hasActivePlannedDays = planDays.some(day => day.recipe_id || day.recipes);
+    if (!hasActivePlannedDays) {
+      await generateWeeklyPlanInternal();
+    }
 
     const activePlannedDays = planDays.filter(day => day.recipe_id || day.recipes);
     if (activePlannedDays.length === 0) {
-      alert('No dinners planned for this week yet! Please click "Generate Weekly Plan" on the Planner tab or select recipes first.');
+      alert('No recipes available to plan. Please add recipes to your Recipe Library first.');
       return;
     }
 
-    // 1. Collect all required ingredients from active weekly plan
+    // 2. Collect all required ingredients from active weekly plan
     activePlannedDays.forEach(day => {
       const rec = day.recipes || recipes.find(r => r.id === day.recipe_id);
       if (!rec) return;
@@ -1178,8 +1271,8 @@ export async function mountMeals(container, navigate) {
         const norm = (ing.normalized_name || ing.ingredient_name || '').toLowerCase().trim();
         if (!norm) return;
 
-        // Check if ingredient is already in stock in pantry
-        const hasInPantry = pantryItems.some(p => (p.normalized_name || p.ingredient_name || '').toLowerCase().trim() === norm && p.in_stock);
+        // Check if ingredient is already in stock in pantry (bypassed if forceAllPlanIngredients)
+        const hasInPantry = !forceAllPlanIngredients && pantryItems.some(p => (p.normalized_name || p.ingredient_name || '').toLowerCase().trim() === norm && p.in_stock);
         
         // Check if already on current shopping list (and not checked off)
         const alreadyInShopping = shoppingItems.some(s => (s.normalized_name || s.ingredient_name || '').toLowerCase().trim() === norm && !s.is_checked);
@@ -1189,7 +1282,7 @@ export async function mountMeals(container, navigate) {
             needed.set(norm, {
               ingredient_name: ing.ingredient_name,
               normalized_name: norm,
-              quantity: ing.quantity || 1,
+              quantity: typeof ing.quantity === 'number' ? ing.quantity : 1,
               unit: ing.unit || '',
               category: ing.category || 'Groceries'
             });
@@ -1198,22 +1291,25 @@ export async function mountMeals(container, navigate) {
       });
     });
 
+    if (needed.size === 0) {
+      const addAnyway = confirm('All ingredients for this week are currently marked "In Stock" in your pantry.\n\nWould you like to add all fresh ingredients from this week\'s planned meals to your shopping cart anyway?');
+      if (addAnyway) {
+        return await autoGenerateShoppingList(true);
+      }
+      return;
+    }
+
     const newShoppingItems = Array.from(needed.values()).map(n => ({
       id: generateUUID(),
       household_id: household.id,
       meal_plan_id: activePlan?.id || null,
       ingredient_name: n.ingredient_name,
       normalized_name: n.normalized_name,
-      quantity: n.quantity,
-      unit: n.unit,
-      category: n.category,
+      quantity: typeof n.quantity === 'number' ? n.quantity : 1,
+      unit: n.unit || '',
+      category: n.category || 'Groceries',
       is_checked: false
     }));
-
-    if (newShoppingItems.length === 0) {
-      alert('All ingredients for this week are already in stock in your pantry or already on your shopping list! 🎉');
-      return;
-    }
 
     if (isSupabaseConfigured) {
       const { data, error } = await supabase.from('meal_shopping_items').insert(newShoppingItems).select();
@@ -1230,7 +1326,8 @@ export async function mountMeals(container, navigate) {
       localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
     }
 
-    alert(`Added ${newShoppingItems.length} missing ingredient${newShoppingItems.length > 1 ? 's' : ''} to your shopping list! 🛒`);
+    render();
+    alert(`🛒 Added ${newShoppingItems.length} missing ingredient${newShoppingItems.length > 1 ? 's' : ''} to your shopping cart!`);
   }
 
   await loadAllData();
