@@ -18,6 +18,8 @@
     "vite-plugin-pwa": "^2.0.0"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.3",
     "qrcode": "^1.5.4"
   }
 }
