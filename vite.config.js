@@ -8,9 +8,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png'],
       manifest: {
-        name: 'AndiNú - 30 Min Bedtime Mat Routine',
+        name: 'AndiNú',
         short_name: 'AndiNú',
-        description: 'Daily 30-minute couples bedtime mat routine: 10m strength, 15m mobility, 5m wind-down with music and voice cues.',
+        description: 'Shared Private Space',
         theme_color: '#090d16',
         background_color: '#090d16',
         display: 'standalone',
