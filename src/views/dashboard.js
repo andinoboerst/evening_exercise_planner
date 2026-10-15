@@ -3,6 +3,7 @@ import {
   getActiveHousehold, 
   getHouseholdMembers, 
   inviteHouseholdMember, 
+  signInWithGoogle,
   supabase, 
   isSupabaseConfigured 
 } from '../services/supabase.js';
@@ -207,6 +208,15 @@ export async function mountDashboard(container, navigate) {
           </div>
         </div>
       </section>
+
+      <!-- Dashboard Footer with Privacy Policy and Terms of Service -->
+      <footer class="dash-footer">
+        <div class="dash-footer-links">
+          <a href="/pp" data-nav="/pp">Privacy Policy</a> • 
+          <a href="/tos" data-nav="/tos">Terms of Service</a>
+        </div>
+        <p class="dash-footer-copy">© 2026 Andinu (Andino & Núria) • andinu.cc</p>
+      </footer>
     </div>
 
     <!-- Household / Partner Modal -->
@@ -296,6 +306,201 @@ export async function mountDashboard(container, navigate) {
       if (modal) modal.style.display = 'none';
       mountDashboard(container, navigate);
     }
+  });
+}
+
+export function mountPublicHome(container, navigate) {
+  container.innerHTML = `
+    <div class="public-home-shell">
+      <!-- Public Hero Section -->
+      <header class="public-hero glass-panel">
+        <div class="public-hero-badge">
+          <span class="pulse-dot"></span>
+          <span>Private Household & Partner Suite</span>
+        </div>
+        
+        <div class="public-brand-lockup">
+          <div class="public-logo-wrap">
+            <img src="/AndiNu_icon.png" alt="Andinu Logo" class="public-logo-img" />
+          </div>
+          <div class="public-titles">
+            <div class="dash-names-pill">Andino & Núria</div>
+            <h1 class="public-title">Andinu</h1>
+            <p class="public-domain"><code>andinu.cc</code></p>
+          </div>
+        </div>
+
+        <p class="public-tagline">
+          A Private Household Suite for Daily Routines, Meal Planning & Shared Collections
+        </p>
+
+        <p class="public-lead">
+          Andinu brings our evening wellness routines, weekly dinner menus, on-hand pantry inventory, and mutual wishlists together in one unified, collaborative home space.
+        </p>
+
+        <!-- Prominent Google Sign-In Action -->
+        <div class="public-cta-box">
+          <button id="btn-public-google-login" class="btn-google-auth">
+            <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z"/>
+              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+            </svg>
+            <span>Sign in with Google</span>
+          </button>
+
+          ${!isSupabaseConfigured ? `
+            <div class="mock-login-badge" style="margin-top: 12px;">
+              <span>⚠️ Supabase credentials not yet detected in environment.</span>
+              <button id="btn-public-mock-login" class="btn-secondary-sm" style="margin-top: 8px; width: 100%;">
+                Preview as Guest
+              </button>
+            </div>
+          ` : ''}
+
+          <p class="public-auth-hint">
+            Authorized household access only. Authentication is secured by Google Sign-In and Supabase Row Level Security.
+          </p>
+        </div>
+      </header>
+
+      <!-- App Overview Section (Required by Google OAuth Verification) -->
+      <section class="public-features-section">
+        <div class="public-section-header">
+          <h2 class="public-section-title">What is Andinu?</h2>
+          <p class="public-section-subtitle">
+            An overview of the three integrated modules built for our shared household life.
+          </p>
+        </div>
+
+        <div class="public-cards-grid">
+          <!-- Feature 1: Nighttime Routine Guide -->
+          <article class="public-feature-card glass-panel">
+            <div class="feature-card-header">
+              <div class="feature-icon-wrap icon-routine">
+                <span>🌙</span>
+              </div>
+              <span class="feature-pill">Daily Wellness</span>
+            </div>
+            <h3 class="feature-title">Nighttime Routine Guide</h3>
+            <p class="feature-desc">
+              Personal wind-down checklists and evening habit tracking. Features a structured 30-minute couples mat routine broken into 10 minutes of strength, 15 minutes of deep mobility/stretching, and 5 minutes of mindful wind-down, accompanied by synchronized Spotify playlists.
+            </p>
+            <ul class="feature-bullets">
+              <li>Interval exercise timers with audio cues</li>
+              <li>Customizable routine sequences and phases</li>
+              <li>Evening wind-down and relaxation tracking</li>
+            </ul>
+          </article>
+
+          <!-- Feature 2: Meal Prep, Pantry & Smart Weekly Planner -->
+          <article class="public-feature-card glass-panel">
+            <div class="feature-card-header">
+              <div class="feature-icon-wrap icon-meals">
+                <span>🍳</span>
+              </div>
+              <span class="feature-pill">Kitchen Hub</span>
+            </div>
+            <h3 class="feature-title">Meal Prep & Weekly Planner</h3>
+            <p class="feature-desc">
+              Recipe management, pantry inventory tracking, weekly meal scheduling, and automated grocery lists. Synchronizes what's in our kitchen cabinets with what we cook each evening, minimizing food waste and simplifying grocery shopping trips.
+            </p>
+            <ul class="feature-bullets">
+              <li>Interactive pantry inventory (in-stock vs. out)</li>
+              <li>7-day dinner calendar with ingredient coverage metrics</li>
+              <li>Dynamic shopping list that automatically updates pantry stock</li>
+            </ul>
+          </article>
+
+          <!-- Feature 3: Shared Household Lists -->
+          <article class="public-feature-card glass-panel">
+            <div class="feature-card-header">
+              <div class="feature-icon-wrap icon-lists">
+                <span>📋</span>
+              </div>
+              <span class="feature-pill">Shared Collections</span>
+            </div>
+            <h3 class="feature-title">Shared Household Lists</h3>
+            <p class="feature-desc">
+              Collaborative checkbox trackers for our mutual interests. Enables us to catalog movies to watch together, rare vinyl records to add to our home sound system, and favorite travel destinations across the globe.
+            </p>
+            <ul class="feature-bullets">
+              <li>Category tabs for Movies, Vinyl Records, and Travel Places</li>
+              <li>Live completion status and progress counts</li>
+              <li>Personal curation notes and acquisition years</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- Transparency & Data Use Callout -->
+      <section class="public-transparency-card glass-panel">
+        <div class="transparency-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#C86D51" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+        </div>
+        <div class="transparency-content">
+          <h3 class="transparency-title">Google Sign-In & Privacy Commitment</h3>
+          <p class="transparency-text">
+            Andinu uses Google Sign-In strictly to authenticate identity and verify household group membership. We request only your basic profile information (email address, display name, and profile picture). We adhere strictly to the <strong>Google API Services User Data Policy</strong> and its Limited Use requirements. We never sell your data, use it for advertising, or feed it into generalized AI models.
+          </p>
+          <div class="transparency-links">
+            <a href="/pp" class="text-link" data-nav="/pp">Read our full Privacy Policy →</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Public Footer (CRITICAL for Google Crawler) -->
+      <footer class="public-footer">
+        <div class="public-footer-links">
+          <a href="/pp" data-nav="/pp" class="public-footer-link">Privacy Policy</a>
+          <span class="footer-separator">•</span>
+          <a href="/tos" data-nav="/tos" class="public-footer-link">Terms of Service</a>
+          <span class="footer-separator">•</span>
+          <a href="/login" data-nav="/login" class="public-footer-link">Sign In</a>
+        </div>
+        <p class="public-footer-copy">
+          © 2026 Andinu (Andino & Núria) • Hosted securely at <a href="https://andinu.cc">andinu.cc</a>
+        </p>
+      </footer>
+    </div>
+  `;
+
+  // Attach login button listener
+  document.getElementById('btn-public-google-login')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-public-google-login');
+    if (btn) {
+      btn.innerHTML = `<span class="spinner"></span> Connecting to Google...`;
+      btn.disabled = true;
+    }
+    const { error } = await signInWithGoogle();
+    if (error) {
+      alert(`Sign in failed: ${error.message}`);
+      if (btn) {
+        btn.innerHTML = `<span>Sign in with Google</span>`;
+        btn.disabled = false;
+      }
+    }
+  });
+
+  document.getElementById('btn-public-mock-login')?.addEventListener('click', () => {
+    localStorage.setItem('andinu_mock_user', JSON.stringify({
+      id: 'mock-andino',
+      email: 'andino@andinu.cc',
+      user_metadata: { full_name: 'Andino & Núria' }
+    }));
+    navigate('/');
+  });
+
+  // Attach navigation listeners for internal links
+  container.querySelectorAll('[data-nav]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const path = el.getAttribute('data-nav');
+      if (path) navigate(path);
+    });
   });
 }
 

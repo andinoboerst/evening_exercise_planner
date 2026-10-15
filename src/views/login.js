@@ -6,11 +6,11 @@ export function mountLogin(container, navigate) {
       <div class="login-card glass-panel">
         <div class="login-header">
           <div class="login-logo-wrap">
-            <img src="/AndiNu_icon.png" alt="AndiNú Logo" class="login-logo-img" />
+            <img src="/AndiNu_icon.png" alt="Andinu Logo" class="login-logo-img" />
           </div>
           <div class="dash-names-pill" style="margin: 0 auto 8px auto; width: fit-content;">Andino & Núria</div>
-          <h1 class="login-title">AndiNú</h1>
-          <p class="login-subtitle">Our Private Shared Space • <code>andinu.cc</code></p>
+          <h1 class="login-title">Andinu</h1>
+          <p class="login-subtitle">Household Suite • <code>andinu.cc</code></p>
         </div>
 
         <div class="login-body">
@@ -44,6 +44,12 @@ export function mountLogin(container, navigate) {
             </svg>
             <span>Private household security: Only invited Google accounts are authorized.</span>
           </div>
+
+          <div class="login-footer-links">
+            <a href="/" data-nav="/">Overview</a> • 
+            <a href="/pp" data-nav="/pp">Privacy Policy</a> • 
+            <a href="/tos" data-nav="/tos">Terms of Service</a>
+          </div>
         </div>
       </div>
     </div>
@@ -67,11 +73,18 @@ export function mountLogin(container, navigate) {
 
   document.getElementById('btn-mock-login')?.addEventListener('click', () => {
     localStorage.setItem('andinu_mock_user', JSON.stringify({
-      id: 'mock-andi',
-      email: 'andi@andinu.cc',
-      user_metadata: { full_name: 'Andi' }
+      id: 'mock-andino',
+      email: 'andino@andinu.cc',
+      user_metadata: { full_name: 'Andino & Núria' }
     }));
     navigate('/');
   });
-}
 
+  container.querySelectorAll('[data-nav]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const path = el.getAttribute('data-nav');
+      if (path) navigate(path);
+    });
+  });
+}

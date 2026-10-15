@@ -2,10 +2,12 @@ import { getCurrentUser, isEmailAllowed, waitForAuthReady } from './services/sup
 import { renderBottomDock, setupNavEvents } from './components/navigation.js';
 import { mountLogin } from './views/login.js';
 import { mountAuthCallback } from './views/auth-callback.js';
-import { mountDashboard } from './views/dashboard.js';
+import { mountDashboard, mountPublicHome } from './views/dashboard.js';
 import { mountRoutine, unmountRoutine } from './views/routine.js';
 import { mountMeals } from './views/meals.js';
 import { mountLists } from './views/lists.js';
+import { mountPrivacyPolicy } from './views/privacy-policy.js';
+import { mountTermsOfService } from './views/terms-of-service.js';
 
 export function applyRouteTheme(path) {
   document.body.classList.remove('theme-hub', 'theme-routine', 'theme-meals', 'theme-lists');
@@ -50,30 +52,73 @@ class AppRouter {
       this.currentViewCleanup = null;
     }
 
-    // Public routes (skip auth check)
+    // Public legal routes (CRITICAL for Google OAuth verification: always return 200 without auth)
+    if (path === '/pp') {
+      this.appEl.innerHTML = '';
+      mountPrivacyPolicy(this.appEl, (p) => this.navigate(p));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
+
+    if (path === '/tos') {
+      this.appEl.innerHTML = '';
+      mountTermsOfService(this.appEl, (p) => this.navigate(p));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
+
+    // Public login route
     if (path === '/login') {
       this.appEl.innerHTML = '';
       mountLogin(this.appEl, (p) => this.navigate(p));
+      window.scrollTo({ top: 0, behavior: 'instant' });
       return;
     }
 
     if (path === '/auth/callback' || path.startsWith('/auth/callback')) {
       this.appEl.innerHTML = '';
       mountAuthCallback(this.appEl, (p) => this.navigate(p));
+      window.scrollTo({ top: 0, behavior: 'instant' });
       return;
     }
 
     // Non-destructive auth check: Wait for cookies and storage hydration
     await waitForAuthReady();
-
     const user = await getCurrentUser();
+
+    // Dual-state Root Homepage (/)
+    if (path === '/' || path === '') {
+      if (!user || !isEmailAllowed(user.email)) {
+        // State A: Logged Out -> Render Public Showcase & Sign-in (NO REDIRECT to /login)
+        this.appEl.innerHTML = '';
+        mountPublicHome(this.appEl, (p) => this.navigate(p));
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        return;
+      }
+
+      // State B: Logged In -> Render Private Dashboard with Navigation Dock
+      this.appEl.innerHTML = '';
+      const viewContainer = document.createElement('main');
+      viewContainer.className = 'app-view-container';
+      viewContainer.id = 'app-view-container';
+      this.appEl.appendChild(viewContainer);
+
+      const dock = renderBottomDock(path);
+      this.appEl.appendChild(dock);
+      setupNavEvents((p) => this.navigate(p));
+
+      mountDashboard(viewContainer, (p) => this.navigate(p));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
+
+    // Protected Routes (/routine, /meals, /lists)
     if (!user) {
-      // User is not authenticated; redirect to login
       this.navigate('/login');
       return;
     }
 
-    // Check email allowlist
+    // Check email allowlist for protected views
     if (!isEmailAllowed(user.email)) {
       alert(`The Google account ${user.email} is not authorized for this private household.`);
       this.navigate('/login');
@@ -83,7 +128,6 @@ class AppRouter {
     // Route matching for protected views
     this.appEl.innerHTML = '';
 
-    // Main Content Container
     const viewContainer = document.createElement('main');
     viewContainer.className = 'app-view-container';
     viewContainer.id = 'app-view-container';
@@ -94,9 +138,7 @@ class AppRouter {
     this.appEl.appendChild(dock);
     setupNavEvents((p) => this.navigate(p));
 
-    if (path === '/' || path === '') {
-      mountDashboard(viewContainer, (p) => this.navigate(p));
-    } else if (path === '/routine') {
+    if (path === '/routine') {
       mountRoutine(viewContainer);
       this.currentViewCleanup = () => unmountRoutine();
     } else if (path === '/meals') {
