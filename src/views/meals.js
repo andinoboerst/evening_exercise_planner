@@ -81,12 +81,21 @@ export async function mountMeals(container, navigate) {
           .maybeSingle();
 
         if (!plan) {
-          const { data: newPlan } = await supabase
+          const { data: newPlan, error: newPlanErr } = await supabase
             .from('meal_plans')
-            .insert([{ household_id: household.id, week_start_date: weekDateStr, title: 'Weekly Plan' }])
+            .insert([{ 
+              id: generateUUID(),
+              household_id: household.id, 
+              week_start_date: weekDateStr, 
+              title: 'Weekly Plan' 
+            }])
             .select()
             .single();
-          plan = newPlan;
+          if (!newPlanErr) {
+            plan = newPlan;
+          } else {
+            console.warn('Error creating weekly plan in Supabase:', newPlanErr);
+          }
         }
 
         activePlan = plan;
@@ -762,8 +771,9 @@ export async function mountMeals(container, navigate) {
         if (isSupabaseConfigured && activePlan?.id) {
           try {
             await supabase.from('meal_plan_days').delete().eq('meal_plan_id', activePlan.id);
-            await supabase.from('meal_plan_days').insert(
+            const { error: insErr } = await supabase.from('meal_plan_days').insert(
               newPlanDays.map(p => ({
+                id: generateUUID(),
                 meal_plan_id: activePlan.id,
                 day_of_week: p.day_of_week,
                 recipe_id: p.recipe_id,
@@ -771,6 +781,9 @@ export async function mountMeals(container, navigate) {
                 is_cooked: false
               }))
             );
+            if (insErr) {
+              console.warn('Error saving plan days to Supabase:', insErr);
+            }
           } catch (e) {
             console.warn('Error saving plan to Supabase:', e);
           }
@@ -814,6 +827,7 @@ export async function mountMeals(container, navigate) {
             await supabase
               .from('meal_plan_days')
               .upsert({
+                id: targetDay?.id && !targetDay.id.startsWith('plan-day-') ? targetDay.id : generateUUID(),
                 meal_plan_id: activePlan.id,
                 day_of_week: dIdx,
                 recipe_id: chosenRecipeId
@@ -1148,16 +1162,29 @@ export async function mountMeals(container, navigate) {
   async function autoGenerateShoppingList() {
     const needed = new Map();
 
+    const activePlannedDays = planDays.filter(day => day.recipe_id || day.recipes);
+    if (activePlannedDays.length === 0) {
+      alert('No dinners planned for this week yet! Please click "Generate Weekly Plan" on the Planner tab or select recipes first.');
+      return;
+    }
+
     // 1. Collect all required ingredients from active weekly plan
-    planDays.forEach(day => {
+    activePlannedDays.forEach(day => {
       const rec = day.recipes || recipes.find(r => r.id === day.recipe_id);
       if (!rec) return;
 
-      (rec.recipe_ingredients || []).forEach(ing => {
-        const norm = (ing.normalized_name || ing.ingredient_name).toLowerCase().trim();
+      const ings = rec.recipe_ingredients || [];
+      ings.forEach(ing => {
+        const norm = (ing.normalized_name || ing.ingredient_name || '').toLowerCase().trim();
+        if (!norm) return;
+
         // Check if ingredient is already in stock in pantry
-        const hasInPantry = pantryItems.some(p => p.normalized_name === norm && p.in_stock);
-        if (!hasInPantry) {
+        const hasInPantry = pantryItems.some(p => (p.normalized_name || p.ingredient_name || '').toLowerCase().trim() === norm && p.in_stock);
+        
+        // Check if already on current shopping list (and not checked off)
+        const alreadyInShopping = shoppingItems.some(s => (s.normalized_name || s.ingredient_name || '').toLowerCase().trim() === norm && !s.is_checked);
+
+        if (!hasInPantry && !alreadyInShopping) {
           if (!needed.has(norm)) {
             needed.set(norm, {
               ingredient_name: ing.ingredient_name,
@@ -1172,7 +1199,7 @@ export async function mountMeals(container, navigate) {
     });
 
     const newShoppingItems = Array.from(needed.values()).map(n => ({
-      id: isSupabaseConfigured ? undefined : `shop-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: generateUUID(),
       household_id: household.id,
       meal_plan_id: activePlan?.id || null,
       ingredient_name: n.ingredient_name,
@@ -1184,12 +1211,17 @@ export async function mountMeals(container, navigate) {
     }));
 
     if (newShoppingItems.length === 0) {
-      alert('All ingredients for this week are already in stock in your pantry! 🎉');
+      alert('All ingredients for this week are already in stock in your pantry or already on your shopping list! 🎉');
       return;
     }
 
     if (isSupabaseConfigured) {
-      const { data } = await supabase.from('meal_shopping_items').insert(newShoppingItems).select();
+      const { data, error } = await supabase.from('meal_shopping_items').insert(newShoppingItems).select();
+      if (error) {
+        console.error('Error inserting auto-filled shopping items:', error);
+        alert(`Failed to add items to shopping list: ${error.message}`);
+        return;
+      }
       if (data) {
         shoppingItems = [...data, ...shoppingItems];
       }
@@ -1197,6 +1229,8 @@ export async function mountMeals(container, navigate) {
       shoppingItems = [...newShoppingItems, ...shoppingItems];
       localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
     }
+
+    alert(`Added ${newShoppingItems.length} missing ingredient${newShoppingItems.length > 1 ? 's' : ''} to your shopping list! 🛒`);
   }
 
   await loadAllData();
