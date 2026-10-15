@@ -354,7 +354,13 @@ export async function mountLists(container, navigate) {
           .select()
           .single();
 
-        if (!error && data) {
+        if (error) {
+          console.error('Supabase error inserting list item:', error);
+          alert(`Supabase Error (${error.code || 'DB'}): ${error.message}\n\nPlease verify that the database migrations have been executed in your Supabase project.`);
+          return;
+        }
+
+        if (data) {
           items.unshift(data);
         }
       } else {
@@ -443,7 +449,13 @@ export async function mountLists(container, navigate) {
           .select()
           .single();
 
-        if (!error && data) {
+        if (error) {
+          console.error('Supabase error creating category:', error);
+          alert(`Supabase Error (${error.code || 'DB'}): ${error.message}\n\nPlease verify that the database migrations have been executed in your Supabase project.`);
+          return;
+        }
+
+        if (data) {
           categories.push(data);
           activeCategoryId = data.id;
         }

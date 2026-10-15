@@ -2,40 +2,48 @@ import { createBrowserClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 
 // Read configuration from Vite import.meta.env or fallback process.env
-const supabaseUrl = 
+let rawUrl = (
   import.meta.env?.VITE_SUPABASE_URL || 
   import.meta.env?.NEXT_PUBLIC_SUPABASE_URL || 
-  '';
+  ''
+).trim();
 
-const supabaseAnonKey = 
+const supabaseAnonKey = (
   import.meta.env?.VITE_SUPABASE_ANON_KEY || 
   import.meta.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-  '';
+  ''
+).trim();
+
+// Auto-derive project URL if ref or publishable key was supplied instead of full URL
+if ((!rawUrl || !rawUrl.startsWith('http')) && supabaseAnonKey.includes('.')) {
+  try {
+    const payload = JSON.parse(atob(supabaseAnonKey.split('.')[1]));
+    if (payload?.ref) {
+      rawUrl = `https://${payload.ref}.supabase.co`;
+    }
+  } catch (_) {}
+} else if (rawUrl && !rawUrl.startsWith('http') && /^[a-z0-9]{20}$/i.test(rawUrl)) {
+  rawUrl = `https://${rawUrl}.supabase.co`;
+}
+
+export const supabaseUrl = rawUrl;
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
   supabaseAnonKey && 
+  supabaseUrl.startsWith('http') &&
   !supabaseUrl.includes('your-project-ref')
 );
 
-// Explicit 1-year durable cookie options to prevent logout across deployments
-export const DURABLE_COOKIE_OPTIONS = {
-  path: '/',
-  sameSite: 'lax',
-  secure: typeof window !== 'undefined' && window.location.protocol === 'https:',
-  maxAge: 60 * 60 * 24 * 365 // 1 year in seconds
-};
-
 let client = null;
 if (isSupabaseConfigured) {
-  // Use @supabase/ssr createBrowserClient for durable cookie management
-  client = createBrowserClient(supabaseUrl, supabaseAnonKey, {
-    cookieOptions: DURABLE_COOKIE_OPTIONS,
+  client = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      flowType: 'pkce'
+      flowType: 'pkce',
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined
     }
   });
 }
@@ -46,29 +54,36 @@ export const supabase = client;
 let isAuthReady = false;
 let authReadyPromise = null;
 
-export function waitForAuthReady() {
-  if (isAuthReady) return Promise.resolve();
+export async function waitForAuthReady() {
+  if (isAuthReady) return;
+  if (!isSupabaseConfigured) {
+    isAuthReady = true;
+    return;
+  }
+
+  try {
+    // Check localStorage immediately for hydrated session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      isAuthReady = true;
+      return session;
+    }
+  } catch (_) {}
+
   if (authReadyPromise) return authReadyPromise;
 
   authReadyPromise = new Promise((resolve) => {
-    if (!isSupabaseConfigured) {
-      isAuthReady = true;
-      resolve();
-      return;
-    }
-
-    // Supabase JS fires INITIAL_SESSION once local storage & cookies have hydrated
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       isAuthReady = true;
       subscription.unsubscribe();
       resolve(session);
     });
 
-    // Safety timeout: if network or browser storage is slow, resolve after 1200ms
+    // Generous fallback timeout to prevent false logouts on slower mobile networks
     setTimeout(() => {
       isAuthReady = true;
-      resolve();
-    }, 1200);
+      resolve(null);
+    }, 3000);
   });
 
   return authReadyPromise;
@@ -112,7 +127,7 @@ export async function signInWithGoogle() {
       redirectTo,
       queryParams: {
         access_type: 'offline',
-        prompt: 'consent'
+        prompt: 'select_account'
       }
     }
   });
