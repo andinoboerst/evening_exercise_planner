@@ -6,10 +6,10 @@ export function mountLogin(container, navigate) {
       <div class="login-card glass-panel">
         <div class="login-header">
           <div class="login-logo-wrap">
-            <img src="/AndiNu_icon.png" alt="Andinu Logo" class="login-logo-img" />
+            <img src="/AndiNu_icon.png" alt="AndiNú Logo" class="login-logo-img" />
           </div>
           <div class="dash-names-pill" style="margin: 0 auto 8px auto; width: fit-content;">Andino & Núria</div>
-          <h1 class="login-title">Andinu</h1>
+          <h1 class="login-title">AndiNú</h1>
           <p class="login-subtitle">Household Suite • <code>andinu.cc</code></p>
         </div>
 

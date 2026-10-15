@@ -215,7 +215,7 @@ export async function mountDashboard(container, navigate) {
           <a href="/pp" data-nav="/pp">Privacy Policy</a> • 
           <a href="/tos" data-nav="/tos">Terms of Service</a>
         </div>
-        <p class="dash-footer-copy">© 2026 Andinu (Andino & Núria) • andinu.cc</p>
+        <p class="dash-footer-copy">© 2026 AndiNú (Andino & Núria) • andinu.cc</p>
       </footer>
     </div>
 
@@ -321,11 +321,11 @@ export function mountPublicHome(container, navigate) {
         
         <div class="public-brand-lockup">
           <div class="public-logo-wrap">
-            <img src="/AndiNu_icon.png" alt="Andinu Logo" class="public-logo-img" />
+            <img src="/AndiNu_icon.png" alt="AndiNú Logo" class="public-logo-img" />
           </div>
           <div class="public-titles">
             <div class="dash-names-pill">Andino & Núria</div>
-            <h1 class="public-title">Andinu</h1>
+            <h1 class="public-title">AndiNú</h1>
             <p class="public-domain"><code>andinu.cc</code></p>
           </div>
         </div>
@@ -335,7 +335,7 @@ export function mountPublicHome(container, navigate) {
         </p>
 
         <p class="public-lead">
-          Andinu brings our evening wellness routines, weekly dinner menus, on-hand pantry inventory, and mutual wishlists together in one unified, collaborative home space.
+          AndiNú brings our evening wellness routines, weekly dinner menus, on-hand pantry inventory, and mutual wishlists together in one unified, collaborative home space.
         </p>
 
         <!-- Prominent Google Sign-In Action -->
@@ -368,7 +368,7 @@ export function mountPublicHome(container, navigate) {
       <!-- App Overview Section (Required by Google OAuth Verification) -->
       <section class="public-features-section">
         <div class="public-section-header">
-          <h2 class="public-section-title">What is Andinu?</h2>
+          <h2 class="public-section-title">What is AndiNú?</h2>
           <p class="public-section-subtitle">
             An overview of the three integrated modules built for our shared household life.
           </p>
@@ -444,7 +444,7 @@ export function mountPublicHome(container, navigate) {
         <div class="transparency-content">
           <h3 class="transparency-title">Google Sign-In & Privacy Commitment</h3>
           <p class="transparency-text">
-            Andinu uses Google Sign-In strictly to authenticate identity and verify household group membership. We request only your basic profile information (email address, display name, and profile picture). We adhere strictly to the <strong>Google API Services User Data Policy</strong> and its Limited Use requirements. We never sell your data, use it for advertising, or feed it into generalized AI models.
+            AndiNú uses Google Sign-In strictly to authenticate identity and verify household group membership. We request only your basic profile information (email address, display name, and profile picture). We adhere strictly to the <strong>Google API Services User Data Policy</strong> and its Limited Use requirements. We never sell your data, use it for advertising, or feed it into generalized AI models.
           </p>
           <div class="transparency-links">
             <a href="/pp" class="text-link" data-nav="/pp">Read our full Privacy Policy →</a>
@@ -462,7 +462,7 @@ export function mountPublicHome(container, navigate) {
           <a href="/login" data-nav="/login" class="public-footer-link">Sign In</a>
         </div>
         <p class="public-footer-copy">
-          © 2026 Andinu (Andino & Núria) • Hosted securely at <a href="https://andinu.cc">andinu.cc</a>
+          © 2026 AndiNú (Andino & Núria) • Hosted securely at <a href="https://andinu.cc">andinu.cc</a>
         </p>
       </footer>
     </div>

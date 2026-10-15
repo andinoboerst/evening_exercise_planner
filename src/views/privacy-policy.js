@@ -4,8 +4,8 @@ export function mountPrivacyPolicy(container, navigate) {
       <nav class="legal-nav">
         <a href="/" class="legal-back-link" data-nav="/">
           <span class="back-arrow">←</span>
-          <img src="/AndiNu_icon.png" alt="Andinu Logo" class="legal-logo" />
-          <span class="legal-brand-name">Andinu</span>
+          <img src="/AndiNu_icon.png" alt="AndiNú Logo" class="legal-logo" />
+          <span class="legal-brand-name">AndiNú</span>
         </a>
         <div class="legal-nav-links">
           <a href="/tos" class="legal-nav-link" data-nav="/tos">Terms of Service</a>
@@ -16,17 +16,17 @@ export function mountPrivacyPolicy(container, navigate) {
       <article class="legal-document glass-panel">
         <header class="legal-header">
           <div class="legal-tag">Legal & Privacy</div>
-          <h1 class="legal-title">Andinu Privacy Policy</h1>
+          <h1 class="legal-title">AndiNú Privacy Policy</h1>
           <p class="legal-date"><strong>Effective Date:</strong> October 15, 2026 • <strong>Last Updated:</strong> October 15, 2026</p>
           <p class="legal-summary">
-            Welcome to Andinu (accessible at <a href="https://andinu.cc">https://andinu.cc</a>). We respect your privacy and are committed to protecting your personal information. This Privacy Policy outlines how we collect, use, disclose, and safeguard your data when you use our household productivity web application.
+            Welcome to AndiNú (accessible at <a href="https://andinu.cc">https://andinu.cc</a>). We respect your privacy and are committed to protecting your personal information. This Privacy Policy outlines how we collect, use, disclose, and safeguard your data when you use our household productivity web application.
           </p>
         </header>
 
         <section class="legal-section">
           <h2>1. Introduction & Scope</h2>
           <p>
-            Andinu ("we", "us", or "our") operates the web application located at <code>https://andinu.cc</code>. Andinu is a private household and personal productivity suite that provides couples and household members with:
+            AndiNú ("we", "us", or "our") operates the web application located at <code>https://andinu.cc</code>. AndiNú is a private household and personal productivity suite that provides couples and household members with:
           </p>
           <ul>
             <li>A <strong>Nighttime Routine Guide</strong> with structured workouts, mobility timers, and wind-down audio cues.</li>
@@ -43,7 +43,7 @@ export function mountPrivacyPolicy(container, navigate) {
 
           <h3>A. Google User Profile Information (Google OAuth)</h3>
           <p>
-            When you sign in to Andinu using Google Sign-In (OAuth 2.0), we request authorization via the standard Google identity scopes:
+            When you sign in to AndiNú using Google Sign-In (OAuth 2.0), we request authorization via the standard Google identity scopes:
           </p>
           <ul>
             <li><code>openid</code> — To verify your authenticated session identity.</li>
@@ -76,7 +76,7 @@ export function mountPrivacyPolicy(container, navigate) {
         <section class="legal-section">
           <h2>3. How We Use Your Information</h2>
           <p>
-            All collected information is used solely to operate and improve Andinu:
+            All collected information is used solely to operate and improve AndiNú:
           </p>
           <ol>
             <li><strong>Authentication & Session Maintenance:</strong> To authenticate your identity via Google OAuth, establish a persistent user session, and protect your private account.</li>
@@ -89,7 +89,7 @@ export function mountPrivacyPolicy(container, navigate) {
         <section class="legal-section highlight-box">
           <h2>4. Google API Services User Data Policy Disclosure (Limited Use Compliance)</h2>
           <p class="compliance-statement">
-            <strong>Andinu's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. We do not use Google user data for advertising, marketing, or training generalized AI models, and we never sell, rent, or trade your Google user data to third parties.</strong>
+            <strong>AndiNú's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. We do not use Google user data for advertising, marketing, or training generalized AI models, and we never sell, rent, or trade your Google user data to third parties.</strong>
           </p>
           <p>
             Specifically:
@@ -109,7 +109,7 @@ export function mountPrivacyPolicy(container, navigate) {
           </p>
           <ul>
             <li><strong>Database & Authentication (Supabase):</strong> User accounts, household memberships, and application records are stored in managed PostgreSQL databases hosted by <strong>Supabase</strong>. All database tables are guarded with PostgreSQL Row Level Security (RLS) policies ensuring that only verified household members can read, create, edit, or delete household records.</li>
-            <li><strong>Hosting & Encryption (Vercel):</strong> Andinu is deployed on <strong>Vercel</strong>'s edge cloud. All web traffic between your browser and our servers is strictly encrypted in transit using Transport Layer Security (TLS 1.2+ / HTTPS).</li>
+            <li><strong>Hosting & Encryption (Vercel):</strong> AndiNú is deployed on <strong>Vercel</strong>'s edge cloud. All web traffic between your browser and our servers is strictly encrypted in transit using Transport Layer Security (TLS 1.2+ / HTTPS).</li>
           </ul>
         </section>
 
@@ -127,10 +127,10 @@ export function mountPrivacyPolicy(container, navigate) {
         <section class="legal-section">
           <h2>7. Contact Information</h2>
           <p>
-            If you have questions, concerns, or requests regarding this Privacy Policy, your Google user data, or your privacy rights on Andinu, please contact:
+            If you have questions, concerns, or requests regarding this Privacy Policy, your Google user data, or your privacy rights on AndiNú, please contact:
           </p>
           <div class="legal-contact-box">
-            <p><strong>Andinu Support & Privacy Team</strong></p>
+            <p><strong>AndiNú Support & Privacy Team</strong></p>
             <p>Website: <a href="https://andinu.cc">https://andinu.cc</a></p>
             <p>Email: <a href="mailto:privacy@andinu.cc">privacy@andinu.cc</a> (or <a href="mailto:support@andinu.cc">support@andinu.cc</a>)</p>
           </div>
@@ -142,7 +142,7 @@ export function mountPrivacyPolicy(container, navigate) {
             <a href="/tos" data-nav="/tos">Terms of Service</a> • 
             <a href="/login" data-nav="/login">Sign In</a>
           </div>
-          <p class="legal-copy">© 2026 Andinu • All rights reserved.</p>
+          <p class="legal-copy">© 2026 AndiNú • All rights reserved.</p>
         </footer>
       </article>
     </div>
