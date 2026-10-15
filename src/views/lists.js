@@ -1,7 +1,8 @@
 import { 
   getActiveHousehold, 
   supabase, 
-  isSupabaseConfigured 
+  isSupabaseConfigured,
+  generateUUID
 } from '../services/supabase.js';
 
 export async function mountLists(container, navigate) {
@@ -337,7 +338,7 @@ export async function mountLists(container, navigate) {
       if (!title || !activeCategoryId) return;
 
       const newItem = {
-        id: isSupabaseConfigured ? undefined : `local-${Date.now()}`,
+        id: generateUUID(),
         household_id: household.id,
         category_id: activeCategoryId,
         title,
@@ -435,7 +436,7 @@ export async function mountLists(container, navigate) {
       if (!name) return;
 
       const newCat = {
-        id: isSupabaseConfigured ? undefined : `cat-${Date.now()}`,
+        id: generateUUID(),
         household_id: household.id,
         name,
         icon,

@@ -1,7 +1,8 @@
 import { 
   getActiveHousehold, 
   supabase, 
-  isSupabaseConfigured 
+  isSupabaseConfigured,
+  generateUUID
 } from '../services/supabase.js';
 
 export async function mountMeals(container, navigate) {
@@ -884,7 +885,7 @@ export async function mountMeals(container, navigate) {
         if (!name) return;
 
         const newItem = {
-          id: isSupabaseConfigured ? undefined : `shop-${Date.now()}`,
+          id: generateUUID(),
           household_id: household.id,
           ingredient_name: name,
           normalized_name: name.toLowerCase().trim(),
@@ -982,7 +983,7 @@ export async function mountMeals(container, navigate) {
         const norm = name.toLowerCase().trim();
 
         const newItem = {
-          id: isSupabaseConfigured ? undefined : `pantry-${Date.now()}`,
+          id: generateUUID(),
           household_id: household.id,
           ingredient_name: name,
           normalized_name: norm,
