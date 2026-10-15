@@ -1,9 +1,9 @@
 {
-  "name": "AndiNú — 30 Min Bedtime Mat Routine",
+  "name": "AndiNú — Private Household Suite",
   "short_name": "AndiNú",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#090d16",
+  "background_color": "#FAF8F5",
   "theme_color": "#090d16",
   "orientation": "portrait",
   "icons": [
