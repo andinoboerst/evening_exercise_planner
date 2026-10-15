@@ -32,6 +32,7 @@ export async function mountLists(container, navigate) {
         const { data: itms, error: itmErr } = await supabase
           .from('list_items')
           .select('*')
+          .order('is_completed', { ascending: true })
           .order('created_at', { ascending: false });
 
         if (!itmErr && itms) {
@@ -89,6 +90,18 @@ export async function mountLists(container, navigate) {
     } else if (filter === 'completed') {
       filteredItems = filteredItems.filter(i => i.is_completed);
     }
+
+    // Sort pending items to the top, completed items below
+    filteredItems.sort((a, b) => {
+      const aDone = Boolean(a.is_completed);
+      const bDone = Boolean(b.is_completed);
+      if (aDone !== bDone) {
+        return aDone ? 1 : -1;
+      }
+      const timeA = new Date(a.created_at || 0).getTime();
+      const timeB = new Date(b.created_at || 0).getTime();
+      return timeB - timeA;
+    });
 
     const totalCount = items.filter(i => i.category_id === activeCat?.id).length;
     const completedCount = items.filter(i => i.category_id === activeCat?.id && i.is_completed).length;

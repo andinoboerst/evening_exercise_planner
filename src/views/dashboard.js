@@ -38,6 +38,7 @@ export async function mountDashboard(container, navigate) {
       const { data: listItems } = await supabase
         .from('list_items')
         .select('*, list_categories(name, icon)')
+        .order('is_completed', { ascending: true })
         .order('created_at', { ascending: false })
         .limit(3);
 
