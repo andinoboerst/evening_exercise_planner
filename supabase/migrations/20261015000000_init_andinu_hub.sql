@@ -31,19 +31,45 @@ CREATE TABLE IF NOT EXISTS public.household_members (
 CREATE INDEX IF NOT EXISTS idx_household_members_user_id ON public.household_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_household_members_email ON public.household_members(email);
 
--- Helper function to check member household IDs
+-- Helper functions to check member household IDs without RLS inlining or recursion
 CREATE OR REPLACE FUNCTION public.current_user_household_ids()
 RETURNS SETOF UUID
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth
 AS $$
-  SELECT household_id
-  FROM public.household_members
-  WHERE user_id = auth.uid()
-     OR lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''));
+BEGIN
+  RETURN QUERY
+  SELECT hm.household_id
+  FROM public.household_members hm
+  WHERE hm.user_id = auth.uid()
+     OR lower(hm.email) = lower(coalesce(auth.jwt() ->> 'email', ''));
+END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.is_household_member(p_household_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1
+    FROM public.household_members hm
+    WHERE hm.household_id = p_household_id
+      AND (
+        hm.user_id = auth.uid()
+        OR lower(hm.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      )
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.current_user_household_ids() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.is_household_member(UUID) TO authenticated, anon;
 
 -- Auto-link newly authenticated users to existing household invitations
 CREATE OR REPLACE FUNCTION public.handle_user_link_household()
@@ -310,41 +336,43 @@ ALTER TABLE public.list_items ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Households viewable by members" ON public.households;
 CREATE POLICY "Households viewable by members"
   ON public.households FOR SELECT
-  USING (id IN (SELECT public.current_user_household_ids()));
+  USING (public.is_household_member(id));
 
 DROP POLICY IF EXISTS "Households modifiable by members" ON public.households;
 CREATE POLICY "Households modifiable by members"
   ON public.households FOR ALL
-  USING (id IN (SELECT public.current_user_household_ids()))
-  WITH CHECK (id IN (SELECT public.current_user_household_ids()));
+  USING (public.is_household_member(id))
+  WITH CHECK (public.is_household_member(id));
 
 -- Household Members Policies
 DROP POLICY IF EXISTS "Members viewable by household members or matching email" ON public.household_members;
 CREATE POLICY "Members viewable by household members or matching email"
   ON public.household_members FOR SELECT
   USING (
-    household_id IN (SELECT public.current_user_household_ids())
+    user_id = auth.uid()
     OR lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    OR public.is_household_member(household_id)
   );
 
 DROP POLICY IF EXISTS "Members insertable by household members" ON public.household_members;
 CREATE POLICY "Members insertable by household members"
   ON public.household_members FOR INSERT
   WITH CHECK (
-    household_id IN (SELECT public.current_user_household_ids())
-    OR NOT EXISTS (SELECT 1 FROM public.household_members WHERE household_id = household_members.household_id)
+    user_id = auth.uid()
+    OR lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    OR public.is_household_member(household_id)
   );
 
 DROP POLICY IF EXISTS "Members modifiable by household members" ON public.household_members;
 CREATE POLICY "Members modifiable by household members"
   ON public.household_members FOR UPDATE
-  USING (household_id IN (SELECT public.current_user_household_ids()))
-  WITH CHECK (household_id IN (SELECT public.current_user_household_ids()));
+  USING (public.is_household_member(household_id))
+  WITH CHECK (public.is_household_member(household_id));
 
 DROP POLICY IF EXISTS "Members deletable by household members" ON public.household_members;
 CREATE POLICY "Members deletable by household members"
   ON public.household_members FOR DELETE
-  USING (household_id IN (SELECT public.current_user_household_ids()));
+  USING (public.is_household_member(household_id));
 
 -- Recipes Policies
 DROP POLICY IF EXISTS "Recipes viewable by household" ON public.recipes;
@@ -523,7 +551,7 @@ CREATE OR REPLACE FUNCTION public.get_or_create_initial_household()
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth
 AS $$
 DECLARE
   v_user_id UUID;
@@ -572,6 +600,8 @@ BEGIN
   RETURN v_household_id;
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.get_or_create_initial_household() TO authenticated, anon;
 
 -- ==============================================================================
 -- 7. ENSURE ALL PRIMARY KEY ID COLUMNS HAVE DEFAULT gen_random_uuid()

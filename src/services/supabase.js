@@ -230,7 +230,7 @@ export async function inviteHouseholdMember(householdId, email, role = 'member')
   const { data, error } = await supabase
     .from('household_members')
     .insert([
-      { household_id: householdId, email: email.toLowerCase().trim(), role }
+      { id: generateUUID(), household_id: householdId, email: email.toLowerCase().trim(), role }
     ])
     .select();
 
