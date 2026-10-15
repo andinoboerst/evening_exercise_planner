@@ -1,3 +1,4 @@
+import { createBrowserClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 
 // Read configuration from Vite import.meta.env or fallback process.env
@@ -17,10 +18,19 @@ export const isSupabaseConfigured = Boolean(
   !supabaseUrl.includes('your-project-ref')
 );
 
-// Fallback dummy client for local development without credentials
+// Explicit 1-year durable cookie options to prevent logout across deployments
+export const DURABLE_COOKIE_OPTIONS = {
+  path: '/',
+  sameSite: 'lax',
+  secure: typeof window !== 'undefined' && window.location.protocol === 'https:',
+  maxAge: 60 * 60 * 24 * 365 // 1 year in seconds
+};
+
 let client = null;
 if (isSupabaseConfigured) {
-  client = createClient(supabaseUrl, supabaseAnonKey, {
+  // Use @supabase/ssr createBrowserClient for durable cookie management
+  client = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: DURABLE_COOKIE_OPTIONS,
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -31,6 +41,38 @@ if (isSupabaseConfigured) {
 }
 
 export const supabase = client;
+
+// Track auth readiness so router never redirects prematurely during hydration
+let isAuthReady = false;
+let authReadyPromise = null;
+
+export function waitForAuthReady() {
+  if (isAuthReady) return Promise.resolve();
+  if (authReadyPromise) return authReadyPromise;
+
+  authReadyPromise = new Promise((resolve) => {
+    if (!isSupabaseConfigured) {
+      isAuthReady = true;
+      resolve();
+      return;
+    }
+
+    // Supabase JS fires INITIAL_SESSION once local storage & cookies have hydrated
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      isAuthReady = true;
+      subscription.unsubscribe();
+      resolve(session);
+    });
+
+    // Safety timeout: if network or browser storage is slow, resolve after 1200ms
+    setTimeout(() => {
+      isAuthReady = true;
+      resolve();
+    }, 1200);
+  });
+
+  return authReadyPromise;
+}
 
 // Helper to get allowed emails from env
 export function getAllowedEmails() {
@@ -54,9 +96,9 @@ export async function signInWithGoogle() {
   if (!isSupabaseConfigured) {
     // Mock authentication for preview / testing
     const mockUser = {
-      id: 'mock-user-andi',
-      email: 'andi@andinu.cc',
-      user_metadata: { full_name: 'Andi' }
+      id: 'mock-user-andinu',
+      email: 'andino@andinu.cc',
+      user_metadata: { full_name: 'Andino & Núria' }
     };
     localStorage.setItem('andinu_mock_user', JSON.stringify(mockUser));
     window.location.href = '/';
@@ -82,19 +124,37 @@ export async function signInWithGoogle() {
 export async function signOut() {
   localStorage.removeItem('andinu_mock_user');
   if (isSupabaseConfigured) {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (_) {}
   }
   window.location.href = '/login';
 }
 
-// Get current session/user
+// Get current session/user with automatic token refreshing
 export async function getCurrentUser() {
   if (!isSupabaseConfigured) {
     const mock = localStorage.getItem('andinu_mock_user');
     return mock ? JSON.parse(mock) : null;
   }
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.user || null;
+
+  try {
+    // 1. Check existing hydrated session
+    const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+    if (session?.user) {
+      return session.user;
+    }
+
+    // 2. Validate user with Supabase server (which auto-refreshes expired access tokens)
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    if (user) {
+      return user;
+    }
+  } catch (err) {
+    console.warn('getCurrentUser verification notice:', err);
+  }
+
+  return null;
 }
 
 // Listen for auth changes
@@ -166,7 +226,7 @@ export async function getHouseholdMembers(householdId) {
   if (!isSupabaseConfigured) {
     const list = JSON.parse(localStorage.getItem('andinu_mock_members') || '[]');
     return [
-      { email: 'andi@andinu.cc', role: 'owner', user_id: 'mock-andi' },
+      { email: 'andino@andinu.cc', role: 'owner', user_id: 'mock-andino' },
       ...list
     ];
   }
@@ -178,4 +238,3 @@ export async function getHouseholdMembers(householdId) {
 
   return data || [];
 }
-

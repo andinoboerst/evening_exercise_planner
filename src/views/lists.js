@@ -202,6 +202,14 @@ export async function mountLists(container, navigate) {
                     ` : ''}
                   </div>
 
+                  ${item.is_completed ? `
+                    <span class="item-stamp-badge">
+                      ${(activeCat?.name || '').toLowerCase().includes('movie') ? 'WATCHED' : 
+                        (activeCat?.name || '').toLowerCase().includes('vinyl') ? 'OWNED' : 
+                        (activeCat?.name || '').toLowerCase().includes('place') ? 'VISITED' : 'COLLECTED'}
+                    </span>
+                  ` : ''}
+
                   <button class="btn-item-delete" data-delete-id="${item.id}" title="Delete item">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="3 6 5 6 21 6"></polyline>

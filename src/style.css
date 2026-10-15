@@ -41,33 +41,42 @@
 
 body {
   font-family: var(--font-body);
-  background-color: var(--bg-space);
-  color: var(--text-main);
+  background-color: var(--app-bg, #FAF8F5);
+  color: var(--app-text, #1C1917);
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
   position: relative;
-  background-image: 
-    radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 65%),
-    radial-gradient(circle at 100% 100%, rgba(236, 72, 153, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 0% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
-  background-attachment: fixed;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* App Shell Layout */
+/* Base App Shell Layout */
 #app {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
-  max-width: 680px;
+  max-width: var(--app-max-width, 960px);
   margin: 0 auto;
   width: 100%;
   padding: calc(var(--safe-top) + 8px) 16px calc(var(--safe-bottom) + 20px) 16px;
   position: relative;
   z-index: 1;
+  transition: max-width 0.25s ease;
+}
+
+/* Scoped Theme: Nighttime Routine ONLY */
+body.theme-routine {
+  --app-max-width: 680px;
+  background-color: var(--bg-space);
+  color: var(--text-main);
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(236, 72, 153, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 0% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
+  background-attachment: fixed;
 }
 
 /* Top Navigation Bar */
@@ -1929,7 +1938,7 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
 
 
 /* ==============================================================================
-   UNIFIED PERSONAL APP HUB STYLES (andinu.cc)
+   UNIFIED PERSONAL APP HUB SCOPED STYLING ARCHITECTURE (andinu.cc)
    ============================================================================== */
 
 /* View Container */
@@ -1938,19 +1947,19 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   flex-direction: column;
   width: 100%;
   flex: 1;
-  padding-bottom: calc(var(--safe-bottom) + 70px);
+  padding-bottom: calc(var(--safe-bottom) + 76px);
 }
 
 /* ------------------------------------------------------------------------------
-   Persistent Mobile Bottom Dock
+   ADAPTIVE PERSISTENT BOTTOM DOCK
    ------------------------------------------------------------------------------ */
 .app-bottom-dock {
   position: fixed;
-  bottom: calc(var(--safe-bottom) + 10px);
+  bottom: calc(var(--safe-bottom) + 12px);
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 32px);
-  max-width: 480px;
+  max-width: 460px;
   z-index: 999;
 }
 
@@ -1958,13 +1967,9 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  background: rgba(14, 19, 34, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-full);
-  padding: 6px 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.15);
+  padding: 6px 10px;
+  transition: all 0.25s ease;
 }
 
 .dock-item {
@@ -1973,24 +1978,13 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  color: var(--text-muted);
   text-decoration: none;
-  padding: 6px 14px;
+  padding: 6px 12px;
   border-radius: var(--radius-full);
   position: relative;
   transition: all 0.2s ease;
   flex: 1;
-  min-width: 60px;
-}
-
-.dock-item:hover {
-  color: var(--text-main);
-}
-
-.dock-item.active {
-  color: #ffffff;
-  background: rgba(99, 102, 241, 0.2);
-  border: 1px solid rgba(99, 102, 241, 0.35);
+  min-width: 58px;
 }
 
 .dock-icon {
@@ -2010,14 +2004,418 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--accent-strength);
-  box-shadow: 0 0 6px var(--accent-strength);
 }
 
-/* ------------------------------------------------------------------------------
-   Login Screen
-   ------------------------------------------------------------------------------ */
-.login-wrapper {
+/* Dock: Theme 1 — Hub (Warm Editorial Studio) */
+body.theme-hub .dock-container {
+  background: rgba(250, 248, 245, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid #E5DFD5;
+  box-shadow: 0 10px 30px rgba(28, 25, 23, 0.08);
+}
+body.theme-hub .dock-item { color: #78716C; }
+body.theme-hub .dock-item:hover { color: #1C1917; }
+body.theme-hub .dock-item.active {
+  color: #1C1917;
+  background: #F2EFE9;
+  border: 1px solid #E5DFD5;
+}
+body.theme-hub .dock-active-pill {
+  background: #C86D51;
+  box-shadow: 0 0 6px rgba(200, 109, 81, 0.5);
+}
+
+/* Dock: Theme Routine (Midnight Space) */
+body.theme-routine .dock-container {
+  background: rgba(14, 19, 34, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.15);
+}
+body.theme-routine .dock-item { color: #94A3B8; }
+body.theme-routine .dock-item:hover { color: #F8FAFC; }
+body.theme-routine .dock-item.active {
+  color: #FFFFFF;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+}
+body.theme-routine .dock-active-pill {
+  background: #6366F1;
+  box-shadow: 0 0 6px #6366F1;
+}
+
+/* Dock: Theme 2 — Meals (Botanical Cookbook) */
+body.theme-meals .dock-container {
+  background: rgba(252, 251, 247, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid #E6E2D8;
+  box-shadow: 0 10px 30px rgba(45, 90, 67, 0.08);
+}
+body.theme-meals .dock-item { color: #666059; }
+body.theme-meals .dock-item:hover { color: #1C1917; }
+body.theme-meals .dock-item.active {
+  color: #2D5A43;
+  background: #E8F0EB;
+  border: 1px solid rgba(45, 90, 67, 0.25);
+}
+body.theme-meals .dock-active-pill {
+  background: #2D5A43;
+  box-shadow: 0 0 6px rgba(45, 90, 67, 0.4);
+}
+
+/* Dock: Theme 3 — Lists (Tactile Neo-Brutalist Journal) */
+body.theme-lists .dock-container {
+  background: #FFFFFF;
+  border: 2px solid #18181B;
+  border-radius: var(--radius-full);
+  box-shadow: 3px 3px 0px #18181B;
+}
+body.theme-lists .dock-item { color: #52525B; }
+body.theme-lists .dock-item:hover { color: #18181B; }
+body.theme-lists .dock-item.active {
+  color: #FFFFFF;
+  background: #18181B;
+  border: 1px solid #18181B;
+}
+body.theme-lists .dock-active-pill {
+  background: #FFFFFF;
+  box-shadow: 0 0 4px #FFFFFF;
+}
+
+/* ==============================================================================
+   THEME 1: MAIN HUB & LOGIN (/ & /login) -> "WARM EDITORIAL STUDIO"
+   ============================================================================== */
+body.theme-hub {
+  --app-bg: #FAF8F5;
+  --app-surface: #FFFFFF;
+  --app-surface-soft: #F2EFE9;
+  --app-border: #E5DFD5;
+  --app-text: #1C1917;
+  --app-text-muted: #78716C;
+  --app-text-dim: #A8A29E;
+  --app-accent: #C86D51;
+  background-color: #FAF8F5;
+  color: #1C1917;
+  background-image: 
+    radial-gradient(circle at 12% 0%, rgba(200, 109, 81, 0.05) 0%, transparent 55%),
+    radial-gradient(circle at 88% 100%, rgba(217, 119, 6, 0.04) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+body.theme-hub #app {
+  max-width: 960px;
+}
+
+/* Hub Dashboard Shell */
+body.theme-hub .dashboard-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+/* Hero Banner */
+body.theme-hub .dash-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 28px;
+  border-radius: var(--radius-lg);
+  border: 1px solid #E5DFD5;
+  background: #FFFFFF;
+  box-shadow: 0 4px 20px rgba(28, 25, 23, 0.04);
+}
+
+body.theme-hub .dash-hero-content {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+body.theme-hub .dash-logo-wrap {
+  width: 62px;
+  height: 62px;
+  border-radius: var(--radius-md);
+  border: 1px solid #E5DFD5;
+  background: #F2EFE9;
+  box-shadow: 0 4px 14px rgba(200, 109, 81, 0.15);
+  overflow: hidden;
+  padding: 3px;
+  flex-shrink: 0;
+}
+
+body.theme-hub .dash-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: calc(var(--radius-md) - 3px);
+}
+
+body.theme-hub .dash-names-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #C86D51;
+  background: #FDF3F0;
+  border: 1px solid #F5DCD5;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  margin-bottom: 4px;
+}
+
+body.theme-hub .dash-title {
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1C1917;
+  letter-spacing: -0.02em;
+}
+
+body.theme-hub .dash-subtitle {
+  color: #78716C;
+  font-size: 0.88rem;
+  margin-top: 2px;
+}
+
+body.theme-hub .btn-household-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FAF8F5;
+  border: 1px solid #E5DFD5;
+  color: #78716C;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+body.theme-hub .btn-household-pill:hover {
+  background: #F2EFE9;
+  color: #1C1917;
+  border-color: #D6CEC3;
+}
+
+/* 3 Core App Launch Cards with DISTINCT Visual Personalities */
+body.theme-hub .dash-apps-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 680px) {
+  body.theme-hub .dash-apps-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+body.theme-hub .app-launch-card {
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+/* Card 1: Nighttime Routine (Midnight Slate Preview) */
+body.theme-hub .card-routine {
+  background: linear-gradient(145deg, #090D16, #111728);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #F8FAFC;
+  box-shadow: 0 6px 20px rgba(9, 13, 22, 0.15);
+}
+body.theme-hub .card-routine:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px rgba(9, 13, 22, 0.3), 0 0 25px rgba(99, 102, 241, 0.25);
+  border-color: #818CF8;
+}
+body.theme-hub .card-routine .card-badge {
+  color: #818CF8;
+}
+body.theme-hub .card-routine .card-icon-wrap {
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+}
+body.theme-hub .card-routine .card-title {
+  color: #FFFFFF;
+}
+body.theme-hub .card-routine .card-desc {
+  color: #94A3B8;
+}
+body.theme-hub .card-routine .card-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #818CF8;
+}
+
+/* Card 2: Meal Prep & Kitchen (Fresh Botanical Sage Preview) */
+body.theme-hub .card-meals {
+  background: #F0F6F2;
+  border: 1px solid #D5E5DA;
+  color: #1C1917;
+  box-shadow: 0 6px 20px rgba(45, 90, 67, 0.06);
+}
+body.theme-hub .card-meals:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px rgba(45, 90, 67, 0.12);
+  border-color: #2D5A43;
+}
+body.theme-hub .card-meals .card-badge {
+  color: #2D5A43;
+}
+body.theme-hub .card-meals .card-icon-wrap {
+  background: #E1EDE6;
+  border: 1px solid #C4DCCE;
+}
+body.theme-hub .card-meals .card-title {
+  color: #1C1917;
+  font-family: 'Newsreader', Georgia, serif;
+}
+body.theme-hub .card-meals .card-desc {
+  color: #556059;
+}
+body.theme-hub .card-meals .card-footer {
+  border-top: 1px solid #D5E5DA;
+  color: #2D5A43;
+}
+
+/* Card 3: Our Shared Lists (Tactile Neo-Brutalist Preview) */
+body.theme-hub .card-lists {
+  background: #FFFFFF;
+  border: 2px solid #18181B;
+  box-shadow: 3px 3px 0px #18181B;
+  color: #18181B;
+}
+body.theme-hub .card-lists:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0px #18181B;
+}
+body.theme-hub .card-lists .card-badge {
+  color: #2563EB;
+  font-family: 'JetBrains Mono', monospace;
+}
+body.theme-hub .card-lists .card-icon-wrap {
+  background: #F4F4F6;
+  border: 1.5px solid #18181B;
+}
+body.theme-hub .card-lists .card-title {
+  color: #18181B;
+  font-family: 'Space Grotesk', sans-serif;
+}
+body.theme-hub .card-lists .card-desc {
+  color: #52525B;
+}
+body.theme-hub .card-lists .card-footer {
+  border-top: 1.5px solid #18181B;
+  color: #18181B;
+  font-weight: 700;
+}
+
+/* Hub Summary Widgets */
+body.theme-hub .dash-widgets-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 680px) {
+  body.theme-hub .dash-widgets-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+body.theme-hub .dash-widget {
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid #E5DFD5;
+  background: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(28, 25, 23, 0.03);
+}
+
+body.theme-hub .widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+body.theme-hub .widget-title {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1C1917;
+}
+
+body.theme-hub .widget-link {
+  color: #C86D51;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+body.theme-hub .meal-preview-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: #FAF8F5;
+  border: 1px solid #E5DFD5;
+  border-radius: var(--radius-md);
+}
+
+body.theme-hub .meal-preview-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1C1917;
+}
+
+body.theme-hub .meal-preview-meta {
+  font-size: 0.8rem;
+  color: #78716C;
+}
+
+body.theme-hub .status-planned {
+  background: #FDF3F0;
+  color: #C86D51;
+  border: 1px solid #F5DCD5;
+}
+
+body.theme-hub .status-cooked {
+  background: #EBF5EF;
+  color: #2D5A43;
+  border: 1px solid #CCE3D3;
+}
+
+body.theme-hub .recent-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: #FAF8F5;
+  border: 1px solid #E5DFD5;
+  border-radius: var(--radius-sm);
+  color: #1C1917;
+}
+
+body.theme-hub .item-cat-badge {
+  font-size: 0.72rem;
+  color: #78716C;
+  background: #F2EFE9;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+/* Hub Login Screen */
+body.theme-hub .login-wrapper {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2025,1305 +2423,699 @@ body.routine-active .spotify-player-dock .spotify-inapp-sub {
   width: 100%;
 }
 
-.login-card {
+body.theme-hub .login-card {
   width: 100%;
   max-width: 420px;
-  padding: 36px 28px;
+  padding: 40px 32px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-accent);
+  border: 1px solid #E5DFD5;
+  background: #FFFFFF;
   text-align: center;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 40px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 10px 40px rgba(28, 25, 23, 0.06);
 }
 
-.login-logo-wrap,
-.login-icon-glow {
+body.theme-hub .login-logo-wrap {
   width: 76px;
   height: 76px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(236, 72, 153, 0.2));
-  border: 1px solid var(--border-accent);
+  background: #FDF3F0;
+  border: 1px solid #F5DCD5;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 16px auto;
-  box-shadow: 0 0 30px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 6px 20px rgba(200, 109, 81, 0.15);
   overflow: hidden;
   padding: 4px;
 }
 
-.login-logo-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: calc(var(--radius-lg) - 4px);
-}
-
-.login-title {
+body.theme-hub .login-title {
   font-family: var(--font-heading);
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #ffffff 40%, #c7d2fe);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #1C1917;
 }
 
-.login-subtitle {
-  color: var(--text-muted);
-  font-size: 0.85rem;
+body.theme-hub .login-subtitle {
+  color: #78716C;
+  font-size: 0.88rem;
   margin-top: 4px;
 }
 
-.login-desc {
-  color: var(--text-muted);
+body.theme-hub .login-desc {
+  color: #78716C;
   font-size: 0.92rem;
   line-height: 1.5;
   margin: 24px 0 20px 0;
 }
 
-.btn-google-auth {
+body.theme-hub .btn-google-auth {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   width: 100%;
   padding: 14px 20px;
-  background: #ffffff;
-  color: #1f2937;
+  background: #1C1917;
+  color: #FFFFFF;
   font-weight: 600;
   font-size: 0.95rem;
   border-radius: var(--radius-md);
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 15px rgba(28, 25, 23, 0.15);
   transition: all 0.2s ease;
 }
 
-.btn-google-auth:hover {
+body.theme-hub .btn-google-auth:hover {
+  background: #000000;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.25);
 }
 
-.mock-login-badge {
-  margin-top: 20px;
-  padding: 14px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.25);
-  border-radius: var(--radius-md);
-  font-size: 0.82rem;
-  color: #fbbf24;
+/* ==============================================================================
+   THEME 2: MEAL PREP & KITCHEN (/meals) -> "MODERN BOTANICAL COOKBOOK"
+   ============================================================================== */
+body.theme-meals {
+  --app-bg: #FCFBF7;
+  --app-surface: #FFFFFF;
+  --app-surface-soft: #F5F3EC;
+  --app-border: #E6E2D8;
+  --app-text: #1C1917;
+  --app-text-muted: #666059;
+  --app-text-dim: #9E968B;
+  --app-accent: #2D5A43;
+  background-color: #FCFBF7;
+  color: #1C1917;
+  background-image: 
+    radial-gradient(circle at 10% 0%, rgba(45, 90, 67, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 90% 100%, rgba(217, 93, 57, 0.04) 0%, transparent 50%);
+  background-attachment: fixed;
 }
 
-.login-security-note {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  margin-top: 24px;
+body.theme-meals #app {
+  max-width: 1040px;
 }
 
-/* ------------------------------------------------------------------------------
-   Dashboard Views
-   ------------------------------------------------------------------------------ */
-.dashboard-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: 100%;
-}
-
-.dash-hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 22px 24px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-accent);
-  background: linear-gradient(135deg, rgba(21, 28, 49, 0.9), rgba(14, 19, 34, 0.8));
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-}
-
-.dash-hero-content {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.dash-logo-wrap {
-  width: 58px;
-  height: 58px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-accent);
-  background: rgba(14, 19, 34, 0.8);
-  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.3);
-  overflow: hidden;
-  padding: 2px;
-  flex-shrink: 0;
-}
-
-.dash-logo-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: calc(var(--radius-md) - 2px);
-}
-
-.dash-names-pill {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #c7d2fe;
-  background: rgba(99, 102, 241, 0.2);
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  padding: 2px 10px;
-  border-radius: var(--radius-full);
-  margin-bottom: 4px;
-}
-
-.view-header-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.view-brand-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-accent);
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
-  flex-shrink: 0;
-}
-
-.brand-mini-logo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.view-brand-tag {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #f472b6;
-  margin-bottom: 2px;
-}
-
-.nav-brand-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-}
-
-.dash-avatar-cluster {
-  display: flex;
-  align-items: center;
-}
-
-.avatar-ring {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 1.1rem;
-  font-family: var(--font-heading);
-  border: 2px solid var(--bg-space);
-}
-
-.avatar-andi {
-  background: linear-gradient(135deg, #6366f1, #3b82f6);
-  color: #fff;
-  z-index: 2;
-}
-
-.avatar-nu {
-  background: linear-gradient(135deg, #ec4899, #f43f5e);
-  color: #fff;
-  margin-left: -12px;
-  z-index: 1;
-}
-
-.dash-title {
-  font-family: var(--font-heading);
-  font-size: 1.6rem;
-  font-weight: 700;
-}
-
-.dash-subtitle {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  margin-top: 2px;
-}
-
-.btn-household-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid var(--border-accent);
-  color: #c7d2fe;
-  font-size: 0.8rem;
+body.theme-meals .view-title {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 2.1rem;
   font-weight: 600;
-  padding: 8px 14px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  color: #1C1917;
 }
 
-.btn-household-pill:hover {
-  background: rgba(99, 102, 241, 0.3);
-}
-
-/* App Launch Cards Grid */
-.dash-apps-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-}
-
-@media (min-width: 600px) {
-  .dash-apps-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.app-launch-card {
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  transition: all 0.25s ease;
-  background: rgba(21, 28, 49, 0.6);
-}
-
-.app-launch-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--border-accent);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(99, 102, 241, 0.2);
-}
-
-.card-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  margin-bottom: 12px;
-}
-
-.card-icon-wrap {
-  width: 50px;
-  height: 50px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  margin-bottom: 14px;
-}
-
-.icon-routine { background: rgba(99, 102, 241, 0.18); border: 1px solid rgba(99, 102, 241, 0.3); }
-.icon-meals { background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(245, 158, 11, 0.3); }
-.icon-lists { background: rgba(236, 72, 153, 0.18); border: 1px solid rgba(236, 72, 153, 0.3); }
-
-.card-title {
-  font-family: var(--font-heading);
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
-.card-desc {
-  color: var(--text-muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
-  margin-bottom: 20px;
-  flex: 1;
-}
-
-.card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  color: #818cf8;
-  font-weight: 600;
-  font-size: 0.82rem;
-}
-
-.card-arrow {
-  font-size: 1.1rem;
-  transition: transform 0.2s ease;
-}
-
-.app-launch-card:hover .card-arrow {
-  transform: translateX(4px);
-}
-
-/* Dashboard Summary Widgets */
-.dash-widgets-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
-@media (min-width: 600px) {
-  .dash-widgets-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.dash-widget {
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-}
-
-.widget-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-}
-
-.widget-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.widget-icon { font-size: 1.1rem; }
-
-.widget-title {
-  font-family: var(--font-heading);
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
-.widget-link {
-  color: #818cf8;
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.meal-preview-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-md);
-}
-
-.meal-preview-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.meal-preview-meta {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  display: flex;
-  gap: 8px;
-}
-
-.meal-preview-status {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-}
-
-.status-planned {
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-}
-
-.status-cooked {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
-}
-
-.recent-list-items {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.recent-item-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-}
-
-.item-title {
-  flex: 1;
-  font-weight: 500;
-}
-
-.item-title.completed {
-  text-decoration: line-through;
-  color: var(--text-dim);
-}
-
-.item-cat-badge {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-}
-
-.widget-empty {
-  padding: 16px;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 0.85rem;
-}
-
-/* ------------------------------------------------------------------------------
-   Shared Lists View (/lists)
-   ------------------------------------------------------------------------------ */
-.lists-view-shell, .meals-view-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  width: 100%;
-}
-
-.view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.view-title {
-  font-family: var(--font-heading);
-  font-size: 1.7rem;
-  font-weight: 700;
-}
-
-.view-subtitle {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  margin-top: 2px;
-}
-
-.category-tabs-scroll {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  scrollbar-width: none;
-}
-
-.category-tabs-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.category-tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(21, 28, 49, 0.7);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  padding: 10px 16px;
-  border-radius: var(--radius-full);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s ease;
-}
-
-.category-tab-btn:hover {
-  border-color: var(--border-accent);
-  color: var(--text-main);
-}
-
-.category-tab-btn.active {
-  background: rgba(99, 102, 241, 0.22);
-  border-color: #818cf8;
-  color: #ffffff;
-}
-
-.cat-badge {
-  background: rgba(236, 72, 153, 0.25);
-  color: #f472b6;
-  font-size: 0.7rem;
-  padding: 2px 7px;
-  border-radius: var(--radius-full);
-}
-
-.list-controls-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px 20px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-}
-
-@media (min-width: 600px) {
-  .list-controls-bar {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-}
-
-.list-summary-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.list-cat-emoji { font-size: 1.8rem; }
-
-.active-cat-title {
-  font-family: var(--font-heading);
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.active-cat-progress {
-  color: var(--text-dim);
-  font-size: 0.78rem;
-}
-
-.filter-pills-wrap {
-  display: flex;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.25);
-  padding: 4px;
-  border-radius: var(--radius-full);
-}
-
-.filter-pill {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  font-size: 0.76rem;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-pill.active {
-  background: var(--bg-surface-elevated);
-  color: var(--text-main);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.add-item-card {
-  padding: 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.add-item-row {
-  display: flex;
-  gap: 10px;
-}
-
-.add-item-extras {
-  display: flex;
-  gap: 10px;
-  flex-direction: column;
-}
-
-@media (min-width: 600px) {
-  .add-item-extras {
-    flex-direction: row;
-  }
-}
-
-.text-input {
-  width: 100%;
-  padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-main);
-  font-family: var(--font-body);
+body.theme-meals .view-subtitle {
+  color: #666059;
   font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.2s ease;
 }
 
-.text-input:focus {
-  border-color: #818cf8;
-}
-
-.text-input-subtle {
-  width: 100%;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-family: var(--font-body);
-  font-size: 0.8rem;
-  outline: none;
-}
-
-.text-input-subtle:focus {
-  border-color: var(--border-accent);
-}
-
-.items-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.item-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  transition: all 0.2s ease;
-}
-
-.item-card.is-completed {
-  opacity: 0.6;
-  background: rgba(14, 19, 34, 0.4);
-}
-
-.item-card.is-completed .item-name {
-  text-decoration: line-through;
-  color: var(--text-dim);
-}
-
-.custom-checkbox-wrap {
-  position: relative;
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-  cursor: pointer;
-}
-
-.custom-checkbox-wrap input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.checkbox-box {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 22px;
-  height: 22px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1.5px solid var(--text-dim);
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.custom-checkbox-wrap input:checked ~ .checkbox-box {
-  background: var(--accent-strength);
-  border-color: var(--accent-strength);
-}
-
-.custom-checkbox-wrap input:checked ~ .checkbox-box::after {
-  content: "";
-  position: absolute;
-  left: 7px;
-  top: 3px;
-  width: 5px;
-  height: 10px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-
-.item-text-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.item-name {
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.item-note {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-}
-
-.item-link {
-  font-size: 0.75rem;
-  color: #818cf8;
-  text-decoration: none;
-  margin-top: 2px;
-}
-
-.btn-item-delete {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  transition: all 0.2s ease;
-}
-
-.btn-item-delete:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-}
-
-/* ------------------------------------------------------------------------------
-   Meals View (/meals)
-   ------------------------------------------------------------------------------ */
-.subnav-tabs-bar {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  scrollbar-width: none;
-}
-
-.subnav-tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-weight: 600;
-  font-size: 0.85rem;
-  padding: 8px 16px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s ease;
-}
-
-.subnav-tab:hover {
-  color: var(--text-main);
-}
-
-.subnav-tab.active {
-  background: var(--bg-surface-elevated);
-  color: #ffffff;
-  border: 1px solid var(--border-accent);
-}
-
-.tab-badge {
-  background: #f43f5e;
-  color: #fff;
-  font-size: 0.68rem;
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-}
-
-.pantry-stock-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: #4ade80;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-}
-
-/* Planner Sub-view */
-.planner-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  margin-bottom: 16px;
-}
-
-@media (min-width: 600px) {
-  .planner-hero {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-}
-
-.planner-hero-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.planner-calendar-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.calendar-day-card {
-  padding: 16px 20px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  transition: all 0.2s ease;
-}
-
-.calendar-day-card.is-today {
-  border-color: #818cf8;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(21, 28, 49, 0.8));
-}
-
-.calendar-day-card.is-cooked {
-  opacity: 0.7;
-}
-
-.day-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.day-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.day-name {
-  font-family: var(--font-heading);
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.today-badge {
-  background: var(--accent-strength);
-  color: #fff;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: var(--radius-full);
-}
-
-.select-day-tag {
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--border-subtle);
-  color: #c7d2fe;
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  outline: none;
-}
-
-.recipe-assigned-title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.recipe-assigned-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.pantry-coverage-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-}
-
-.coverage-high {
-  background: rgba(34, 197, 94, 0.18);
-  color: #4ade80;
-}
-
-.coverage-mid {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fbbf24;
-}
-
-.day-ingredients-snippet {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.ing-pill {
-  font-size: 0.74rem;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-}
-
-.ing-pill.has-stock {
-  background: rgba(34, 197, 94, 0.1);
-  color: #86efac;
-}
-
-.ing-pill.needs-stock {
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
-}
-
-.ing-pill-more {
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  align-self: center;
-}
-
-.day-card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.select-swap-recipe {
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
-  outline: none;
-  max-width: 220px;
-}
-
-.btn-mark-cooked {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-main);
-  font-size: 0.78rem;
+body.theme-meals .pantry-stock-pill {
+  background: #E8F0EB;
+  border: 1px solid #C4DCCE;
+  color: #2D5A43;
+  font-size: 0.82rem;
   font-weight: 600;
   padding: 6px 14px;
   border-radius: var(--radius-full);
-  cursor: pointer;
+}
+
+/* Subnav Tabs */
+body.theme-meals .subnav-tabs-bar {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 10px rgba(45, 90, 67, 0.03);
+}
+
+body.theme-meals .subnav-tab {
+  color: #666059;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+body.theme-meals .subnav-tab:hover {
+  color: #1C1917;
+}
+
+body.theme-meals .subnav-tab.active {
+  background: #E8F0EB;
+  color: #2D5A43;
+  border: 1px solid rgba(45, 90, 67, 0.2);
+}
+
+/* Weekly Planner (Menu Board Aesthetic) */
+body.theme-meals .planner-hero {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 10px rgba(45, 90, 67, 0.03);
+}
+
+body.theme-meals .planner-hero h3 {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.35rem;
+  color: #1C1917;
+}
+
+body.theme-meals .planner-hero p {
+  color: #666059;
+}
+
+body.theme-meals .btn-primary-start {
+  background: #2D5A43;
+  color: #FFFFFF;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 4px 14px rgba(45, 90, 67, 0.25);
   transition: all 0.2s ease;
 }
 
-.btn-mark-cooked.cooked {
-  background: rgba(34, 197, 94, 0.2);
-  border-color: #22c55e;
-  color: #4ade80;
+body.theme-meals .btn-primary-start:hover {
+  background: #234835;
+  transform: translateY(-1px);
 }
 
-/* Pantry Columns */
-.pantry-sections-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+body.theme-meals .btn-secondary {
+  background: #F5F3EC;
+  border: 1px solid #E6E2D8;
+  color: #1C1917;
+  font-weight: 600;
 }
 
-@media (min-width: 600px) {
-  .pantry-sections-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.pantry-column {
-  padding: 18px;
+body.theme-meals .calendar-day-card {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
-.column-header {
-  margin-bottom: 14px;
+body.theme-meals .calendar-day-card.is-today {
+  border: 1.5px solid #2D5A43;
+  background: linear-gradient(145deg, #FFFFFF, #F5F9F6);
 }
 
-.column-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.column-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.dot-green { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
-.dot-orange { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
-
-.pantry-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.pantry-item-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.pantry-item-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.pantry-item-name {
+body.theme-meals .day-name {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.25rem;
   font-weight: 600;
-  font-size: 0.9rem;
+  color: #1C1917;
 }
 
-.pantry-item-meta {
-  font-size: 0.75rem;
-  color: var(--text-dim);
+body.theme-meals .today-badge {
+  background: #D95D39; /* Warm tomato highlight */
+  color: #FFFFFF;
 }
 
-.pantry-item-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-stock-toggle {
-  border: none;
-  font-size: 0.75rem;
+body.theme-meals .select-day-tag {
+  background: #F5F3EC;
+  border: 1px solid #E6E2D8;
+  color: #2D5A43;
   font-weight: 600;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
+}
+
+body.theme-meals .recipe-assigned-title {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #1C1917;
+}
+
+body.theme-meals .coverage-high {
+  background: #E8F0EB;
+  color: #2D5A43;
+  border: 1px solid #C4DCCE;
+}
+
+body.theme-meals .coverage-mid {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+body.theme-meals .ing-pill.has-stock {
+  background: #E8F0EB;
+  color: #2D5A43;
+  border: 1px solid #D1E5D8;
+}
+
+body.theme-meals .ing-pill.needs-stock {
+  background: #FDF2E9;
+  color: #D95D39;
+  border: 1px solid #F6D5C3;
+}
+
+body.theme-meals .select-swap-recipe {
+  background: #F5F3EC;
+  border: 1px solid #E6E2D8;
+  color: #1C1917;
+}
+
+body.theme-meals .btn-mark-cooked {
+  background: #F5F3EC;
+  border: 1px solid #E6E2D8;
+  color: #666059;
+}
+
+body.theme-meals .btn-mark-cooked.cooked {
+  background: #E8F0EB;
+  border-color: #2D5A43;
+  color: #2D5A43;
+}
+
+/* Big Touch-Friendly Shopping List */
+body.theme-meals .shopping-header,
+body.theme-meals .add-item-card {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+body.theme-meals .item-card {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
+  border-radius: var(--radius-md);
+  color: #1C1917;
   transition: all 0.2s ease;
 }
 
-.btn-stock-toggle.in-stock {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+body.theme-meals .item-card.is-completed {
+  background: #F7FAF8;
+  opacity: 0.75;
 }
 
-.btn-stock-toggle.out-stock {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
+body.theme-meals .item-card.is-completed .item-name {
+  color: #9E968B;
+  text-decoration: line-through;
 }
 
-.btn-item-delete-sm {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  cursor: pointer;
-  padding: 4px;
+body.theme-meals .checkbox-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 2px solid #9E968B;
+  background: #FFFFFF;
 }
 
-.btn-item-delete-sm:hover {
-  color: #ef4444;
+body.theme-meals .custom-checkbox-wrap input:checked ~ .checkbox-box {
+  background: #2D5A43;
+  border-color: #2D5A43;
 }
 
-/* Recipes Grid */
-.recipes-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-  margin-top: 14px;
-}
-
-@media (min-width: 600px) {
-  .recipes-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.recipe-card {
-  padding: 18px;
+/* Pantry Inventory Columns */
+body.theme-meals .pantry-column {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
-.recipe-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+body.theme-meals .pantry-item-row {
+  background: #FCFBF7;
+  border: 1px solid #E6E2D8;
+  color: #1C1917;
 }
 
-.recipe-prep-pill {
-  font-size: 0.74rem;
-  color: var(--text-muted);
+body.theme-meals .btn-stock-toggle.in-stock {
+  background: #E8F0EB;
+  color: #2D5A43;
 }
 
-.recipe-tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+body.theme-meals .btn-stock-toggle.out-stock {
+  background: #FDF2E9;
+  color: #D95D39;
 }
 
-.recipe-tag-pill {
+/* Recipe Cards */
+body.theme-meals .recipes-header {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
+  border-radius: var(--radius-md);
+}
+
+body.theme-meals .recipe-card {
+  background: #FFFFFF;
+  border: 1px solid #E6E2D8;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+}
+
+body.theme-meals .recipe-title {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1C1917;
+}
+
+body.theme-meals .recipe-prep-pill {
+  color: #666059;
+}
+
+body.theme-meals .recipe-desc {
+  color: #666059;
+}
+
+body.theme-meals .recipe-tag-pill {
+  background: #E8F0EB;
+  color: #2D5A43;
+}
+
+body.theme-meals .recipe-ing-item {
+  background: #F5F3EC;
+  color: #1C1917;
+}
+
+/* ==============================================================================
+   THEME 3: SHARED LISTS TRACKER (/lists) -> "TACTILE COLLECTOR'S JOURNAL"
+   ============================================================================== */
+body.theme-lists {
+  --app-bg: #F4F4F6;
+  --app-surface: #FFFFFF;
+  --app-border: #18181B;
+  --app-text: #18181B;
+  --app-text-muted: #52525B;
+  --app-text-dim: #71717A;
+  background-color: #F4F4F6;
+  color: #18181B;
+  background-image: none;
+}
+
+body.theme-lists #app {
+  max-width: 880px;
+}
+
+body.theme-lists .view-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #18181B;
+}
+
+body.theme-lists .view-subtitle {
+  color: #52525B;
+  font-size: 0.88rem;
+}
+
+body.theme-lists .view-brand-tag {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 0.72rem;
-  background: rgba(99, 102, 241, 0.15);
-  color: #c7d2fe;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
+  color: #2563EB;
 }
 
-.recipe-ingredients-summary h5 {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  margin-bottom: 4px;
+body.theme-lists .view-brand-logo {
+  border: 2px solid #18181B;
+  box-shadow: 2px 2px 0px #18181B;
 }
 
-.recipe-ing-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* Analog Crate-Digger Tabs */
+body.theme-lists .category-tab-btn {
+  background: #FFFFFF;
+  border: 2px solid #18181B;
+  color: #18181B;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 0.88rem;
+  box-shadow: 2px 2px 0px #18181B;
 }
 
-.recipe-ing-item {
-  font-size: 0.72rem;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2px 6px;
+body.theme-lists .category-tab-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #18181B;
+}
+
+body.theme-lists .category-tab-btn.active {
+  background: #18181B;
+  color: #FFFFFF;
+  border-color: #18181B;
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.3);
+}
+
+body.theme-lists .cat-badge {
+  background: #2563EB;
+  color: #FFFFFF;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+}
+
+body.theme-lists .list-controls-bar {
+  background: #FFFFFF;
+  border: 2px solid #18181B;
+  box-shadow: 3px 3px 0px #18181B;
+  border-radius: var(--radius-md);
+}
+
+body.theme-lists .active-cat-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+body.theme-lists .active-cat-progress {
+  font-family: 'JetBrains Mono', monospace;
+  color: #71717A;
+}
+
+body.theme-lists .filter-pills-wrap {
+  background: #F4F4F6;
+  border: 1.5px solid #18181B;
+}
+
+body.theme-lists .filter-pill {
+  color: #52525B;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+body.theme-lists .filter-pill.active {
+  background: #18181B;
+  color: #FFFFFF;
+}
+
+body.theme-lists .add-item-card {
+  background: #FFFFFF;
+  border: 2px solid #18181B;
+  box-shadow: 3px 3px 0px #18181B;
+  border-radius: var(--radius-md);
+}
+
+body.theme-lists .text-input {
+  background: #F4F4F6;
+  border: 1.5px solid #18181B;
+  color: #18181B;
+}
+
+body.theme-lists .text-input:focus {
+  border-color: #2563EB;
+}
+
+body.theme-lists .btn-primary-start {
+  background: #18181B;
+  color: #FFFFFF;
+  border: 2px solid #18181B;
+  box-shadow: 2px 2px 0px #18181B;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+}
+
+body.theme-lists .btn-primary-start:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #18181B;
+}
+
+body.theme-lists .btn-secondary-sm {
+  background: #FFFFFF;
+  border: 2px solid #18181B;
+  box-shadow: 2px 2px 0px #18181B;
+  color: #18181B;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+}
+
+/* Tactile Item Cards with Ink Borders & Hard Shadows */
+body.theme-lists .item-card {
+  background: #FFFFFF;
+  border: 2px solid #18181B;
+  box-shadow: 3px 3px 0px #18181B;
+  border-radius: var(--radius-md);
+  color: #18181B;
+  transition: all 0.15s ease;
+}
+
+body.theme-lists .item-card:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #18181B;
+}
+
+body.theme-lists .item-card.is-completed {
+  background: #FAFAFA;
+  opacity: 0.7;
+}
+
+body.theme-lists .item-card.is-completed .item-name {
+  color: #71717A;
+  text-decoration: line-through;
+}
+
+body.theme-lists .checkbox-box {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #18181B;
   border-radius: 4px;
-  color: var(--text-muted);
+  background: #FFFFFF;
 }
 
-.recipe-instructions-details summary {
+body.theme-lists .custom-checkbox-wrap input:checked ~ .checkbox-box {
+  background: #18181B;
+  border-color: #18181B;
+}
+
+body.theme-lists .item-note {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 0.78rem;
-  color: #818cf8;
-  cursor: pointer;
-  margin-top: 4px;
+  color: #71717A;
 }
 
-.recipe-instructions-text {
-  font-size: 0.82rem;
-  line-height: 1.5;
-  color: var(--text-muted);
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: var(--radius-sm);
+body.theme-lists .item-stamp-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1.5px solid #18181B;
+  background: #FEF08A;
+  color: #18181B;
+  box-shadow: 1.5px 1.5px 0px #18181B;
+  transform: rotate(-3deg);
+  display: inline-block;
+  white-space: nowrap;
 }
 
-.btn-recipe-delete {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.btn-recipe-delete:hover {
-  color: #ef4444;
-}
-
-/* Modal and Emoji Picker */
-.emoji-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.emoji-choice-btn {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--border-subtle);
-  font-size: 1.3rem;
-  padding: 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.emoji-choice-btn:hover, .emoji-choice-btn.selected {
-  background: rgba(99, 102, 241, 0.25);
-  border-color: #818cf8;
-  transform: scale(1.1);
-}
-
-.shop-category-tag {
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-}
-
-.shopping-header {
+/* Modal Styling Shared across Themes */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px 20px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+}
+
+.modal-dialog {
+  width: 100%;
+  max-width: 520px;
+  background: var(--app-surface, #FFFFFF);
+  border: 1px solid var(--app-border, #E5DFD5);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  color: var(--app-text, #1C1917);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 16px;
 }
 
-@media (min-width: 600px) {
-  .shopping-header {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
+.modal-header h3 {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
-.shopping-actions-group {
-  display: flex;
-  gap: 8px;
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: var(--app-text-dim, #A8A29E);
 }
 
-.recipes-header {
+.modal-close:hover {
+  color: var(--app-text, #1C1917);
+}
+
+.modal-intro {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--app-text-muted, #78716C);
+  margin-bottom: 20px;
+}
+
+.household-members-box {
+  background: var(--app-surface-soft, #F2EFE9);
+  border: 1px solid var(--app-border, #E5DFD5);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.household-members-box h4 {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--app-text-muted, #78716C);
+  margin-bottom: 12px;
+}
+
+.member-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.empty-col-note {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  font-style: italic;
-  padding: 8px 0;
+.member-row:last-child {
+  border-bottom: none;
 }
+
+.member-email {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.member-role {
+  font-size: 0.72rem;
+  color: var(--app-text-dim, #A8A29E);
+  margin-left: 6px;
+}
+
+.member-status-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+
+.status-active {
+  background: #EBF5EF;
+  color: #2D5A43;
+}
+
+.status-pending {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.invite-input-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.input-hint {
+  font-size: 0.75rem;
+  color: var(--app-text-dim, #A8A29E);
+  margin-top: 6px;
+}
+
