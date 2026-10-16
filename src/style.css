@@ -6693,6 +6693,164 @@ body.theme-planner #app {
 }
 
 /* ==============================================================================
+   ALL-DAY EVENTS STRIP (Google Calendar Top Bar Pattern)
+   ============================================================================== */
+.day-allday-events-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.planner-allday-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  min-height: 26px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.planner-allday-bar:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.planner-allday-bar:focus-visible {
+  outline: 2px solid var(--planner-border-focus);
+  outline-offset: 1px;
+}
+
+.planner-allday-bar:active {
+  transform: scale(0.99);
+}
+
+/* Color coding for all-day bars */
+.planner-allday-bar.owner-together {
+  background: var(--together-bg);
+  border: 1px solid var(--together-border);
+  color: var(--together-text);
+  border-left-width: 4px;
+}
+
+.planner-allday-bar.owner-me {
+  background: var(--me-bg);
+  border: 1px solid var(--me-border);
+  color: var(--me-text);
+  border-left-width: 4px;
+}
+
+.planner-allday-bar.owner-her {
+  background: var(--her-bg);
+  border: 1px solid var(--her-border);
+  color: var(--her-text);
+  border-left-width: 4px;
+}
+
+.allday-bar-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.allday-recur-badge {
+  font-size: 0.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.allday-owner-tag {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.allday-bar-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  color: inherit;
+}
+
+.allday-location-pin {
+  font-size: 0.72rem;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.allday-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  margin-left: 6px;
+}
+
+.planner-allday-bar:hover .allday-bar-actions,
+.planner-allday-bar:focus-within .allday-bar-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .allday-bar-actions {
+    opacity: 0.85;
+  }
+}
+
+.btn-allday-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.btn-allday-action:hover {
+  background: #FFFFFF;
+  transform: scale(1.1);
+}
+
+/* Recurrence Helper Box */
+.recurrence-hint-box {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #F4F1EA;
+  border: 1px solid var(--planner-border);
+  font-size: 0.78rem;
+  color: var(--planner-text);
+  line-height: 1.4;
+}
+
+/* ==============================================================================
    DESKTOP 7-COLUMN WEEKLY PLANNER BOARD (>= 768px)
    ============================================================================== */
 @media (min-width: 768px) {

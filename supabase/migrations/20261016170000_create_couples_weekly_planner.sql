@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS public.planner_events (
   start_time TIME,
   end_time TIME,
   is_all_day BOOLEAN NOT NULL DEFAULT false,
-  recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK (recurrence_type IN ('none', 'weekly')),
+  recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK (recurrence_type IN ('none', 'weekly', 'monthly', 'annually')),
   recurrence_days INT[] DEFAULT '{}', -- ISO weekdays 1..7 (1=Monday, 7=Sunday)
   recurrence_end_date DATE,
   excluded_dates DATE[] DEFAULT '{}',

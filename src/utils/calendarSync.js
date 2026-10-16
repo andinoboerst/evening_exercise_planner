@@ -249,6 +249,48 @@ export function projectEventsForDate(events = [], isoDate) {
           isProjected: true
         });
       }
+    } else if (ev.recurrence_type === 'monthly') {
+      // Monthly recurrence: same day of the month
+      if (ev.event_date > isoDate) continue;
+      if (ev.recurrence_end_date && ev.recurrence_end_date < isoDate) continue;
+      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.includes(isoDate)) continue;
+
+      const [ey, em, ed] = ev.event_date.split('-').map(Number);
+      const [cy, cm, cd] = isoDate.split('-').map(Number);
+
+      const daysInCurrentMonth = new Date(cy, cm, 0).getDate();
+      const targetDay = Math.min(ed, daysInCurrentMonth);
+
+      if (cd === targetDay) {
+        matched.push({
+          ...ev,
+          instanceDate: isoDate,
+          isProjected: true
+        });
+      }
+    } else if (ev.recurrence_type === 'annually') {
+      // Annually recurrence: anniversaries, birthdays (same month & day)
+      if (ev.event_date > isoDate) continue;
+      if (ev.recurrence_end_date && ev.recurrence_end_date < isoDate) continue;
+      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.includes(isoDate)) continue;
+
+      const [ey, em, ed] = ev.event_date.split('-').map(Number);
+      const [cy, cm, cd] = isoDate.split('-').map(Number);
+
+      let isMatch = (em === cm && ed === cd);
+      // Handle leap year Feb 29 anniversary on non-leap years
+      if (!isMatch && em === 2 && ed === 29 && cm === 2 && cd === 28) {
+        const isLeap = new Date(cy, 1, 29).getMonth() === 1;
+        if (!isLeap) isMatch = true;
+      }
+
+      if (isMatch) {
+        matched.push({
+          ...ev,
+          instanceDate: isoDate,
+          isProjected: true
+        });
+      }
     }
   }
 
@@ -311,6 +353,18 @@ export function createGoogleCalendarLink(event, instanceDate) {
     const dayMap = { 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR', 6: 'SA', 7: 'SU' };
     const byDays = event.recurrence_days.map(d => dayMap[d]).filter(Boolean).join(',');
     let rrule = `RRULE:FREQ=WEEKLY;BYDAY=${byDays}`;
+    if (event.recurrence_end_date) {
+      rrule += `;UNTIL=${event.recurrence_end_date.replace(/-/g, '')}T235959Z`;
+    }
+    params.set('recur', rrule);
+  } else if (event.recurrence_type === 'monthly') {
+    let rrule = 'RRULE:FREQ=MONTHLY';
+    if (event.recurrence_end_date) {
+      rrule += `;UNTIL=${event.recurrence_end_date.replace(/-/g, '')}T235959Z`;
+    }
+    params.set('recur', rrule);
+  } else if (event.recurrence_type === 'annually') {
+    let rrule = 'RRULE:FREQ=YEARLY';
     if (event.recurrence_end_date) {
       rrule += `;UNTIL=${event.recurrence_end_date.replace(/-/g, '')}T235959Z`;
     }
@@ -418,11 +472,33 @@ export function generateIcsContent({
       lines.push(`DTEND:${toICalDateTime(d, endTime)}`);
     }
 
-    // Weekly recurrence rule
+    // Recurrence rules
     if (ev.recurrence_type === 'weekly' && Array.isArray(ev.recurrence_days) && ev.recurrence_days.length > 0) {
       const dayMap = { 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR', 6: 'SA', 7: 'SU' };
-      const byDays = ev.recurrence_days.map(d => dayMap[d]).filter(Boolean).join(',');
-      let rrule = `RRULE:FREQ=WEEKLY;BYDAY=${byDays}`;
+      const byDays = eventDays => eventDays.map(d => dayMap[d]).filter(Boolean).join(',');
+      let rrule = `RRULE:FREQ=WEEKLY;BYDAY=${byDays(ev.recurrence_days)}`;
+      if (ev.recurrence_end_date) {
+        rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
+      }
+      lines.push(rrule);
+
+      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.length > 0) {
+        const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
+        lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
+      }
+    } else if (ev.recurrence_type === 'monthly') {
+      let rrule = 'RRULE:FREQ=MONTHLY';
+      if (ev.recurrence_end_date) {
+        rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
+      }
+      lines.push(rrule);
+
+      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.length > 0) {
+        const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
+        lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
+      }
+    } else if (ev.recurrence_type === 'annually') {
+      let rrule = 'RRULE:FREQ=YEARLY';
       if (ev.recurrence_end_date) {
         rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
       }

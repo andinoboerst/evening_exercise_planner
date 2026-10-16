@@ -150,6 +150,20 @@ export async function mountPlanner(container, navigate) {
         recurrence_type: 'none',
         recurrence_days: [],
         excluded_dates: []
+      },
+      {
+        id: 'ev-demo-7',
+        title: 'Our Anniversary 🥂',
+        notes: 'Celebrating our special day together! Candlelight dinner reservation.',
+        location: 'Gourmet Bistro',
+        owner_type: 'together',
+        event_date: d(6), // Sunday
+        start_time: null,
+        end_time: null,
+        is_all_day: true,
+        recurrence_type: 'annually',
+        recurrence_days: [],
+        excluded_dates: []
       }
     ];
   }
@@ -640,6 +654,8 @@ export async function mountPlanner(container, navigate) {
   function renderDayColumn(day, todayStr) {
     const sleep = day.sleepPlan;
     const isToday = day.isoDate === todayStr;
+    const allDayEvents = day.dayEvents.filter(e => e.is_all_day);
+    const timedEvents = day.dayEvents.filter(e => !e.is_all_day);
 
     return `
       <section class="planner-day-card ${isToday ? 'is-today' : ''}" id="day-card-${day.isoDate}">
@@ -655,6 +671,7 @@ export async function mountPlanner(container, navigate) {
             <span>+</span>
           </button>
         </div>
+
 
         <!-- Partner Heads-Up Status Note -->
         <div class="day-partner-status-box">
@@ -738,16 +755,76 @@ export async function mountPlanner(container, navigate) {
           ` : ''}
         </div>
 
+        <!-- All-Day Events Strip (Compact bar below sleep card, at top of day's events) -->
+        ${allDayEvents.length > 0 ? `
+          <div class="day-allday-events-strip" aria-label="All-day events for ${day.shortName}">
+            ${allDayEvents.map(ev => renderAllDayEventBar(ev, day.isoDate)).join('')}
+          </div>
+        ` : ''}
+
         <!-- Chronological Events List -->
         <div class="day-events-list">
-          ${day.dayEvents.length > 0 ? day.dayEvents.map(ev => renderEventCard(ev, day.isoDate)).join('') : `
+          ${timedEvents.length > 0 ? timedEvents.map(ev => renderEventCard(ev, day.isoDate)).join('') : (allDayEvents.length > 0 ? '' : `
             <div class="day-events-empty">
               <span>No events scheduled</span>
               <button class="empty-add-btn" data-add-for-date="${day.isoDate}">+ Add</button>
             </div>
-          `}
+          `)}
         </div>
       </section>
+    `;
+  }
+
+  // Render an All-Day Event Bar (Google Calendar Top Bar style)
+  function renderAllDayEventBar(ev, instanceDate) {
+    const owner = OWNER_TYPES[ev.owner_type] || OWNER_TYPES.together;
+    const gcalUrl = createGoogleCalendarLink(ev, instanceDate);
+    const isRecurring = Boolean(ev.recurrence_type && ev.recurrence_type !== 'none');
+
+    let recurIcon = '';
+    let recurTitle = '';
+    if (ev.recurrence_type === 'annually') {
+      recurIcon = '🎉';
+      recurTitle = 'Repeats annually (Anniversary / Birthday)';
+    } else if (ev.recurrence_type === 'monthly') {
+      recurIcon = '📅';
+      recurTitle = 'Repeats monthly';
+    } else if (ev.recurrence_type === 'weekly') {
+      recurIcon = '↻';
+      recurTitle = 'Repeats weekly';
+    }
+
+    let tooltip = `${ev.title} (All Day • ${owner.tag})`;
+    if (recurTitle) tooltip += ` — ${recurTitle}`;
+    if (ev.location) tooltip += ` • 📍 ${ev.location}`;
+    if (ev.notes) tooltip += ` • 💬 ${ev.notes}`;
+
+    return `
+      <div 
+        class="planner-allday-bar ${owner.badgeClass}" 
+        data-edit-event="${ev.id}" 
+        data-event-id="${ev.id}" 
+        data-instance-date="${instanceDate}"
+        role="button"
+        tabindex="0"
+        title="${escapeHtml(tooltip)}"
+      >
+        <div class="allday-bar-content">
+          ${recurIcon ? `<span class="allday-recur-badge" title="${recurTitle}">${recurIcon}</span>` : ''}
+          <span class="allday-owner-tag">${owner.tag}</span>
+          <span class="allday-bar-title">${escapeHtml(ev.title)}</span>
+          ${ev.location ? `<span class="allday-location-pin" title="${escapeHtml(ev.location)}">📍</span>` : ''}
+        </div>
+
+        <div class="allday-bar-actions">
+          <a href="${gcalUrl}" target="_blank" rel="noopener noreferrer" class="btn-allday-action btn-allday-gcal" title="Open in Google Calendar" onclick="event.stopPropagation()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </a>
+          <button type="button" class="btn-allday-action btn-allday-delete" data-delete-event="${ev.id}" data-instance-date="${instanceDate}" data-is-recurring="${isRecurring}" title="Delete event" onclick="event.stopPropagation()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
     `;
   }
 
@@ -755,7 +832,16 @@ export async function mountPlanner(container, navigate) {
   function renderEventCard(ev, instanceDate) {
     const owner = OWNER_TYPES[ev.owner_type] || OWNER_TYPES.together;
     const gcalUrl = createGoogleCalendarLink(ev, instanceDate);
-    const isRecurring = ev.recurrence_type === 'weekly';
+    const isRecurring = Boolean(ev.recurrence_type && ev.recurrence_type !== 'none');
+
+    let recurBadge = '';
+    if (ev.recurrence_type === 'weekly') {
+      recurBadge = '<span class="event-recurring-badge" title="Repeats weekly">↻ Weekly</span>';
+    } else if (ev.recurrence_type === 'monthly') {
+      recurBadge = '<span class="event-recurring-badge" title="Repeats monthly">↻ Monthly</span>';
+    } else if (ev.recurrence_type === 'annually') {
+      recurBadge = '<span class="event-recurring-badge" title="Repeats annually (Anniversary / Birthday)">🎉 Annual</span>';
+    }
 
     let timeLabel = 'All Day';
     if (!ev.is_all_day && ev.start_time) {
@@ -768,7 +854,7 @@ export async function mountPlanner(container, navigate) {
         <div class="event-card-top">
           <span class="event-owner-badge">${owner.tag}</span>
           <span class="event-time-badge">${timeLabel}</span>
-          ${isRecurring ? '<span class="event-recurring-badge" title="Repeats weekly">↻ Weekly</span>' : ''}
+          ${recurBadge}
         </div>
 
         <h4 class="event-title">${escapeHtml(ev.title)}</h4>
@@ -892,11 +978,16 @@ export async function mountPlanner(container, navigate) {
 
             <!-- Recurrence Options -->
             <div class="form-group recurrence-section">
-              <label class="form-label">Recurrence</label>
+              <label for="event-input-recurrence" class="form-label">Recurrence</label>
               <select id="event-input-recurrence" class="form-select">
                 <option value="none">One-time event (No repeat)</option>
                 <option value="weekly">Repeats Every Week</option>
+                <option value="monthly">Repeats Monthly (Same day of month)</option>
+                <option value="annually">Repeats Annually (Anniversaries & Birthdays)</option>
               </select>
+
+              <!-- Dynamic recurrence explanation helper -->
+              <div id="recurrence-helper-hint" class="recurrence-hint-box" style="display: none;"></div>
 
               <div id="weekly-days-group" class="weekly-days-picker" style="display: none;">
                 <span class="picker-hint">Repeat on:</span>
@@ -907,10 +998,11 @@ export async function mountPlanner(container, navigate) {
                     </button>
                   `).join('')}
                 </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="event-input-recur-end" class="form-label">Repeat until (Optional)</label>
-                  <input type="date" id="event-input-recur-end" class="form-input" />
-                </div>
+              </div>
+
+              <div id="recurrence-end-group" class="recurrence-end-picker" style="display: none; margin-top: 10px;">
+                <label for="event-input-recur-end" class="form-label">Repeat until (Optional)</label>
+                <input type="date" id="event-input-recur-end" class="form-input" />
               </div>
             </div>
           </div>
@@ -1297,7 +1389,7 @@ export async function mountPlanner(container, navigate) {
           </div>
 
           <div class="modal-body">
-            <p>This is a repeating weekly event. Would you like to delete only this specific day's occurrence, or all future occurrences?</p>
+            <p>This is a recurring event. Would you like to delete only this specific day's occurrence, or stop all future occurrences?</p>
           </div>
 
           <div class="modal-footer flex-col">
@@ -1555,6 +1647,55 @@ export async function mountPlanner(container, navigate) {
     }
   }
 
+  function getOrdinalSuffix(n) {
+    const j = n % 10, k = n % 100;
+    if (j === 1 && k !== 11) return 'st';
+    if (j === 2 && k !== 12) return 'nd';
+    if (j === 3 && k !== 13) return 'rd';
+    return 'th';
+  }
+
+  function updateRecurrenceUI() {
+    const recurSelect = document.getElementById('event-input-recurrence');
+    const weeklyGroup = document.getElementById('weekly-days-group');
+    const recurEndGroup = document.getElementById('recurrence-end-group');
+    const hintBox = document.getElementById('recurrence-helper-hint');
+    const dateVal = document.getElementById('event-input-date')?.value;
+    if (!recurSelect) return;
+
+    const val = recurSelect.value;
+    const isRecurring = val !== 'none';
+
+    if (weeklyGroup) weeklyGroup.style.display = val === 'weekly' ? 'block' : 'none';
+    if (recurEndGroup) recurEndGroup.style.display = isRecurring ? 'block' : 'none';
+
+    if (hintBox) {
+      if (val === 'none') {
+        hintBox.style.display = 'none';
+        hintBox.textContent = '';
+      } else if (val === 'weekly') {
+        hintBox.style.display = 'block';
+        hintBox.innerHTML = '✨ <strong>Weekly:</strong> Repeats on the selected days every week.';
+      } else if (val === 'monthly') {
+        hintBox.style.display = 'block';
+        let dayOfMonth = 'this day';
+        if (dateVal) {
+          const d = parseDateISO(dateVal);
+          dayOfMonth = `the ${d.getDate()}${getOrdinalSuffix(d.getDate())}`;
+        }
+        hintBox.innerHTML = `📅 <strong>Monthly:</strong> Repeats on ${dayOfMonth} of every month.`;
+      } else if (val === 'annually') {
+        hintBox.style.display = 'block';
+        let dateText = 'this date';
+        if (dateVal) {
+          const d = parseDateISO(dateVal);
+          dateText = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        hintBox.innerHTML = `🎉 <strong>Annual / Anniversary:</strong> Repeats every year on ${dateText}. Ideal for anniversaries, birthdays & annual traditions.`;
+      }
+    }
+  }
+
   // Event Modal Setup & Binding
   function openEventModalForDate(isoDate) {
     editingEvent = null;
@@ -1572,6 +1713,9 @@ export async function mountPlanner(container, navigate) {
     const inputAllDay = document.getElementById('event-input-allday');
     if (inputAllDay) inputAllDay.checked = false;
 
+    const timeRow = document.getElementById('time-inputs-row');
+    if (timeRow) timeRow.style.display = 'flex';
+
     const inputStart = document.getElementById('event-input-start');
     if (inputStart) inputStart.value = '18:30';
 
@@ -1587,14 +1731,15 @@ export async function mountPlanner(container, navigate) {
     const inputRecur = document.getElementById('event-input-recurrence');
     if (inputRecur) inputRecur.value = 'none';
 
-    const weeklyGroup = document.getElementById('weekly-days-group');
-    if (weeklyGroup) weeklyGroup.style.display = 'none';
+    const inputRecurEnd = document.getElementById('event-input-recur-end');
+    if (inputRecurEnd) inputRecurEnd.value = '';
 
     document.querySelectorAll('.btn-weekday-toggle').forEach(b => b.classList.remove('active'));
 
     const radioTogether = document.querySelector('input[name="event-owner"][value="together"]');
     if (radioTogether) radioTogether.checked = true;
 
+    updateRecurrenceUI();
     openDialog('planner-event-dialog');
   }
 
@@ -1631,9 +1776,6 @@ export async function mountPlanner(container, navigate) {
     const inputRecur = document.getElementById('event-input-recurrence');
     if (inputRecur) inputRecur.value = ev.recurrence_type || 'none';
 
-    const weeklyGroup = document.getElementById('weekly-days-group');
-    if (weeklyGroup) weeklyGroup.style.display = ev.recurrence_type === 'weekly' ? 'block' : 'none';
-
     document.querySelectorAll('.btn-weekday-toggle').forEach(b => {
       const dayNum = Number(b.getAttribute('data-recur-day'));
       if (Array.isArray(ev.recurrence_days) && ev.recurrence_days.includes(dayNum)) {
@@ -1649,6 +1791,7 @@ export async function mountPlanner(container, navigate) {
     const ownerRadio = document.querySelector(`input[name="event-owner"][value="${ev.owner_type || 'together'}"]`);
     if (ownerRadio) ownerRadio.checked = true;
 
+    updateRecurrenceUI();
     openDialog('planner-event-dialog');
   }
 
@@ -1663,25 +1806,26 @@ export async function mountPlanner(container, navigate) {
       if (timeRow) timeRow.style.display = checkAllDay.checked ? 'none' : 'flex';
     });
 
-    // Toggle recurrence select
+    // Toggle recurrence select and date change
     const recurSelect = document.getElementById('event-input-recurrence');
-    const weeklyGroup = document.getElementById('weekly-days-group');
+    const dateInput = document.getElementById('event-input-date');
     recurSelect?.addEventListener('change', () => {
-      if (weeklyGroup) {
-        weeklyGroup.style.display = recurSelect.value === 'weekly' ? 'block' : 'none';
-        // Auto select current date weekday if none selected
-        if (recurSelect.value === 'weekly') {
-          const hasAny = document.querySelector('.btn-weekday-toggle.active');
-          if (!hasAny) {
-            const dateVal = document.getElementById('event-input-date')?.value;
-            if (dateVal) {
-              const d = parseDateISO(dateVal).getDay();
-              const isoD = d === 0 ? 7 : d;
-              document.querySelector(`.btn-weekday-toggle[data-recur-day="${isoD}"]`)?.classList.add('active');
-            }
+      updateRecurrenceUI();
+      if (recurSelect.value === 'weekly') {
+        const hasAny = document.querySelector('.btn-weekday-toggle.active');
+        if (!hasAny) {
+          const dateVal = dateInput?.value;
+          if (dateVal) {
+            const d = parseDateISO(dateVal).getDay();
+            const isoD = d === 0 ? 7 : d;
+            document.querySelector(`.btn-weekday-toggle[data-recur-day="${isoD}"]`)?.classList.add('active');
           }
         }
       }
+    });
+
+    dateInput?.addEventListener('change', () => {
+      updateRecurrenceUI();
     });
 
     // Weekday toggle buttons
@@ -1711,6 +1855,8 @@ export async function mountPlanner(container, navigate) {
         document.querySelectorAll('.btn-weekday-toggle.active').forEach(b => {
           recurrenceDays.push(Number(b.getAttribute('data-recur-day')));
         });
+      }
+      if (recurrenceType !== 'none') {
         const recurEndVal = document.getElementById('event-input-recur-end')?.value;
         if (recurEndVal) recurrenceEndDate = recurEndVal;
       }

@@ -98,6 +98,28 @@ export function buildIcsString(data) {
         const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
         lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
       }
+    } else if (ev.recurrence_type === 'monthly') {
+      let rrule = 'RRULE:FREQ=MONTHLY';
+      if (ev.recurrence_end_date) {
+        rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
+      }
+      lines.push(rrule);
+
+      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.length > 0) {
+        const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
+        lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
+      }
+    } else if (ev.recurrence_type === 'annually') {
+      let rrule = 'RRULE:FREQ=YEARLY';
+      if (ev.recurrence_end_date) {
+        rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
+      }
+      lines.push(rrule);
+
+      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.length > 0) {
+        const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
+        lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
+      }
     }
 
     lines.push('END:VEVENT');
