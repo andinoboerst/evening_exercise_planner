@@ -4879,3 +4879,8 @@ body.mp-sheet-open { overflow: hidden; }
   .mp-sheet { border-radius: 24px; max-height: 84vh; }
   .mp-sheet-grab { display: none; }
 }
+
+/* Rolling calendar additions */
+.mp-pill-date { font-size: 0.95rem; font-weight: 700; line-height: 1; }
+.mp-day-date { font-size: 0.82rem; color: #9E968B; font-weight: 600; }
+.mp-day-header { flex-wrap: wrap; }

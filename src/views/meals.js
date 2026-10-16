@@ -21,7 +21,7 @@ export async function mountMeals(container, navigate) {
   // UI state
   let sheet = null; // { type: 'recipe' | 'picker', day, slot }
   let showAddRecipe = false;
-  let focusedDay = (new Date().getDay() + 6) % 7; // highlighted mobile pill
+  let focusedDay = null; // ISO date of highlighted mobile pill (set after helpers)
   let dayObserver = null;
 
   const DAYS_OF_WEEK = [
@@ -144,7 +144,7 @@ export async function mountMeals(container, navigate) {
 
   const STORAGE_RECIPES_KEY = 'andinu_cache_recipes';
   const STORAGE_PANTRY_KEY = 'andinu_cache_pantry';
-  const STORAGE_PLAN_DAYS_KEY = 'andinu_cache_plan_slots_v2';
+  const STORAGE_PLAN_DAYS_KEY = 'andinu_cache_plan_slots_v3';
   const STORAGE_SHOPPING_KEY = 'andinu_cache_shopping';
   const LOCAL_PLAN_ID = 'local-plan';
 
@@ -176,17 +176,65 @@ export async function mountMeals(container, navigate) {
   }
 
   const recipeOf = (entry) => entry ? (recipes.find(r => r.id === entry.recipe_id) || entry.recipes || null) : null;
-  const getEntry = (d, s) => planDays.find(p => p.day_of_week === d && p.slot_type === s);
-  const nextDay = (d) => (d + 1) % 7; // Sunday -> Monday of the planned week
+  // Days are keyed by ISO date (YYYY-MM-DD). The planner is a rolling window starting today.
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const toISO = (dt) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+  const parseISO = (s) => { const [y, m, dd] = s.split('-').map(Number); return new Date(y, m - 1, dd); };
+  const todayStr = () => toISO(new Date());
+  const addDays = (s, n) => { const dt = parseISO(s); dt.setDate(dt.getDate() + n); return toISO(dt); };
+  const dowOf = (s) => (parseISO(s).getDay() + 6) % 7; // 0 = Monday
+  const dayName = (s) => parseISO(s).toLocaleDateString(undefined, { weekday: 'long' });
+  const dayShort = (s) => parseISO(s).toLocaleDateString(undefined, { weekday: 'short' });
+  const dayNice = (s) => parseISO(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const windowDates = () => Array.from({ length: 7 }, (_, i) => addDays(todayStr(), i));
+  focusedDay = todayStr();
+
+  const getEntry = (d, s) => planDays.find(p => p.meal_date === d && p.slot_type === s);
+  const nextDay = (d) => addDays(d, 1);
   const isLinked = (entry) => Boolean(entry?.source_meal_prep_id);
   const isInPantry = (norm) => pantryItems.some(p => normName(p.normalized_name || p.ingredient_name) === norm);
+
+  // Staples (oils, spices, condiments, baking basics...) are bought in bulk and their use per
+  // dish is unknown, so they are NEVER removed automatically. Users can override per item.
+  const STAPLE_CATEGORIES = new Set(['pantry', 'spices', 'spice', 'condiments', 'oils', 'baking', 'sauces']);
+  const STAPLE_WORDS = /\b(oil|salt|pepper|vinegar|flour|sugar|spices?|seasoning|paprika|cumin|cinnamon|oregano|thyme|rosemary|turmeric|nutmeg|chili|chilli|mustard|ketchup|mayo|mayonnaise|soy sauce|honey|stock|bouillon|baking|yeast|cornstarch|sesame|curry)\b/i;
+  const isStapleName = (name, category) =>
+    STAPLE_CATEGORIES.has(String(category || '').toLowerCase().trim()) || STAPLE_WORDS.test(String(name || ''));
+  const isStapleItem = (p) => (p.is_staple != null ? Boolean(p.is_staple) : isStapleName(p.ingredient_name, p.category));
+
+  // Marks the entry as consumed and returns normalized names of non-staple ingredients it uses.
+  function collectUsedIngredients(entry) {
+    const names = new Set();
+    entry.ingredients_consumed = true;
+    if (!entry.recipe_id) return names;
+    const mult = entry.servings_multiplier != null ? Number(entry.servings_multiplier) : 1;
+    if (mult <= 0) return names; // leftover lunch: its ingredients went with the 2x dinner
+    (recipeOf(entry)?.recipe_ingredients || []).forEach(ing => {
+      if (isStapleName(ing.ingredient_name, ing.category)) return;
+      const n = normName(ing.normalized_name || ing.ingredient_name);
+      if (n) names.add(n);
+    });
+    return names;
+  }
+
+  // Deletes matching, non-staple pantry rows. Returns the removed items.
+  async function removeFromPantry(norms) {
+    const usedUp = pantryItems.filter(p => norms.has(normName(p.normalized_name || p.ingredient_name)) && !isStapleItem(p));
+    if (!usedUp.length) return [];
+    pantryItems = pantryItems.filter(p => !usedUp.includes(p));
+    if (useDbBasic()) await supabase.from('pantry_items').delete().in('id', usedUp.map(p => p.id));
+    else localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
+    return usedUp;
+  }
 
   function newEntry(d, s) {
     const e = {
       id: generateUUID(),
       meal_plan_id: activePlan?.id || LOCAL_PLAN_ID,
-      day_of_week: d,
+      meal_date: d,
+      day_of_week: dowOf(d),
       slot_type: s,
+      ingredients_consumed: false,
       recipe_id: null,
       recipes: null,
       requested_tag: null,
@@ -292,12 +340,13 @@ export async function mountMeals(container, navigate) {
 
         activePlan = plan;
 
-        if (plan) {
+        {
+          // All household entries from today on, plus past ones not yet consumed
           const { data: days } = await supabase
             .from('meal_plan_days')
             .select('*, recipes(*, recipe_ingredients(*))')
-            .eq('meal_plan_id', plan.id)
-            .order('day_of_week');
+            .or(`meal_date.gte.${todayStr()},ingredients_consumed.eq.false`)
+            .order('meal_date');
           planDays = (days || []).map(d => ({
             ...d,
             slot_type: d.slot_type || 'dinner',
@@ -346,8 +395,10 @@ export async function mountMeals(container, navigate) {
   function toRow(e) {
     return {
       id: e.id,
-      meal_plan_id: activePlan.id,
-      day_of_week: e.day_of_week,
+      meal_plan_id: (e.meal_plan_id && e.meal_plan_id !== LOCAL_PLAN_ID) ? e.meal_plan_id : activePlan.id,
+      meal_date: e.meal_date,
+      day_of_week: dowOf(e.meal_date),
+      ingredients_consumed: Boolean(e.ingredients_consumed),
       slot_type: e.slot_type,
       recipe_id: e.recipe_id || null,
       requested_tag: e.requested_tag || null,
@@ -377,7 +428,7 @@ export async function mountMeals(container, navigate) {
         if (!group.length) continue;
         const { error } = await supabase
           .from('meal_plan_days')
-          .upsert(group, { onConflict: 'meal_plan_id,day_of_week,slot_type' });
+          .upsert(group, { onConflict: 'meal_plan_id,meal_date,slot_type' });
         if (error) console.warn('Error saving meal plan entries:', error);
       }
     } catch (e) {
@@ -428,6 +479,7 @@ export async function mountMeals(container, navigate) {
       entry.recipe_id = recipeId;
       entry.recipes = recipes.find(r => r.id === recipeId) || null;
       entry.is_cooked = false;
+      entry.ingredients_consumed = false; // a new recipe hasn't been used yet
       if (s === 'dinner') entry.servings_multiplier = entry.is_meal_prep ? 2 : 1;
       changes.upsert.push(entry);
       if (s === 'dinner') syncCarryover(d, changes);
@@ -451,9 +503,17 @@ export async function mountMeals(container, navigate) {
     if (!entry) return;
     entry.is_cooked = !entry.is_cooked;
     entry.cooked_at = entry.is_cooked ? new Date().toISOString() : null;
+
+    // Cooking uses up the ingredients right away (once; the day passing won't repeat it)
+    let removed = [];
+    if (entry.is_cooked && !entry.ingredients_consumed) {
+      removed = await removeFromPantry(collectUsedIngredients(entry));
+    }
+
     const changes = newChanges();
     changes.upsert.push(entry);
     await persist(changes);
+    return removed;
   }
 
   // ---------------------------------------------------------------------------
@@ -497,15 +557,17 @@ export async function mountMeals(container, navigate) {
 
   async function autoFillEmptySlots() {
     const used = usedRecipeIds();
-    for (const day of DAYS_OF_WEEK) {
+    // Plans from today onwards (next 7 days); keeps manual choices & locked meal-prep lunches
+    const dates = windowDates();
+    for (let i = 0; i < dates.length; i++) {
       for (const slot of ['dinner', 'lunch']) {
-        const existing = getEntry(day.index, slot);
-        if (existing?.recipe_id) continue; // keeps manual choices & locked meal-prep lunches
-        const tag = SLOT_TAGS[slot][(day.index + (slot === 'lunch' ? 0 : 1)) % SLOT_TAGS[slot].length];
+        const existing = getEntry(dates[i], slot);
+        if (existing?.recipe_id) continue;
+        const tag = SLOT_TAGS[slot][(i + (slot === 'lunch' ? 0 : 1)) % SLOT_TAGS[slot].length];
         const pick = suggestRecipe(tag, used);
         if (!pick) return;
         used.add(pick.id);
-        await setRecipe(day.index, slot, pick.id);
+        await setRecipe(dates[i], slot, pick.id);
       }
     }
   }
@@ -515,7 +577,9 @@ export async function mountMeals(container, navigate) {
   // ---------------------------------------------------------------------------
   function computeWeeklyNeeds() {
     const totals = new Map();
+    const dates = new Set(windowDates());
     planDays.forEach(entry => {
+      if (!dates.has(entry.meal_date)) return; // only the upcoming 7 days
       const rec = recipeOf(entry);
       if (!rec) return;
       const mult = entry.servings_multiplier != null ? Number(entry.servings_multiplier) : 1;
@@ -534,7 +598,8 @@ export async function mountMeals(container, navigate) {
   }
 
   async function generateShoppingList() {
-    if (!planDays.some(p => p.recipe_id)) {
+    const upcoming = new Set(windowDates());
+    if (!planDays.some(p => p.recipe_id && upcoming.has(p.meal_date))) {
       toast('Plan at least one meal first.');
       return false;
     }
@@ -650,11 +715,11 @@ export async function mountMeals(container, navigate) {
     const isLunch = slot === 'lunch';
     const icon = isLunch ? '☀️' : '🌙';
     const label = isLunch ? 'Lunch' : 'Dinner';
-    const dayName = DAYS_OF_WEEK[d].label;
+    const dayLbl = dayName(d);
 
     // Lunch auto-filled by yesterday's meal prep dinner
     if (isLunch && entry && isLinked(entry) && rec) {
-      const prevLabel = DAYS_OF_WEEK[(d + 6) % 7].label;
+      const prevLabel = dayName(addDays(d, -1));
       return `
         <div class="mp-slot mp-slot-linked ${entry.is_cooked ? 'is-cooked' : ''}">
           <div class="mp-slot-head"><span class="mp-slot-name">${icon} ${label}</span><span class="mp-lock">🔒 Locked</span></div>
@@ -672,7 +737,7 @@ export async function mountMeals(container, navigate) {
         <div class="mp-slot ${isPrep ? 'mp-slot-prep' : ''} ${entry.is_cooked ? 'is-cooked' : ''}">
           <div class="mp-slot-head">
             <span class="mp-slot-name">${icon} ${label}</span>
-            ${isPrep ? `<span class="mp-prep-badge">2x Portions • Packs ${DAYS_OF_WEEK[nextDay(d)].label}'s Lunch</span>` : ''}
+            ${isPrep ? `<span class="mp-prep-badge">2x Portions • Packs ${dayName(nextDay(d))}'s Lunch</span>` : ''}
           </div>
           <button class="mp-slot-main" data-action="open-sheet" data-day="${d}" data-slot="${slot}">
             <span class="mp-slot-title">${esc(rec.title)}</span>
@@ -683,11 +748,11 @@ export async function mountMeals(container, navigate) {
             </span>
           </button>
           ${slot === 'dinner' ? `
-            <div class="mp-seg" role="group" aria-label="Dinner portions for ${dayName}">
+            <div class="mp-seg" role="group" aria-label="Dinner portions for ${dayLbl}">
               <button class="mp-seg-btn ${!isPrep ? 'active' : ''}" data-action="set-prep" data-day="${d}" data-prep="0">🍽️ 1x Dinner</button>
               <button class="mp-seg-btn ${isPrep ? 'active prep' : ''}" data-action="set-prep" data-day="${d}" data-prep="1">🍱 2x Meal Prep <small>(+Tomorrow's Lunch)</small></button>
             </div>
-            ${isPrep ? `<div class="mp-connector">↓ Covers ${DAYS_OF_WEEK[nextDay(d)].label}'s lunch</div>` : ''}
+            ${isPrep ? `<div class="mp-connector">↓ Covers ${dayName(nextDay(d))}'s lunch</div>` : ''}
           ` : ''}
         </div>`;
     }
@@ -704,29 +769,32 @@ export async function mountMeals(container, navigate) {
   }
 
   function renderPlannerView() {
-    const todayIdx = (new Date().getDay() + 6) % 7;
-    const plannedCount = planDays.filter(p => p.recipe_id).length;
+    const dates = windowDates();
+    const today = todayStr();
+    const plannedCount = planDays.filter(p => p.recipe_id && dates.includes(p.meal_date)).length;
+    const relLabel = (s) => s === today ? 'Today' : s === addDays(today, 1) ? 'Tomorrow' : null;
 
     return `
       <div class="planner-view">
         <div class="mp-hero">
           <div class="mp-hero-text">
-            <h2>This Week's Menu</h2>
-            <p>${plannedCount} of 14 meals planned. Turn a dinner into 2x Meal Prep to cover tomorrow's lunch.</p>
+            <h2>Coming Up</h2>
+            <p>${plannedCount} of 14 meals planned for the next 7 days. Past days roll off automatically and use up their ingredients from your pantry.</p>
           </div>
           <div class="mp-hero-actions">
-            <button class="btn-secondary" data-action="autofill">✨ Auto-fill empty slots</button>
+            <button class="btn-secondary" data-action="autofill">✨ Plan My Week (from today)</button>
             <button class="mp-primary-btn" data-action="generate-shopping">🛒 Generate Shopping List for This Week</button>
           </div>
         </div>
 
-        <div class="mp-pills" role="tablist" aria-label="Day of week">
-          ${DAYS_OF_WEEK.map(d => {
-            const l = getEntry(d.index, 'lunch');
-            const dn = getEntry(d.index, 'dinner');
+        <div class="mp-pills" role="tablist" aria-label="Upcoming days">
+          ${dates.map(ds => {
+            const l = getEntry(ds, 'lunch');
+            const dn = getEntry(ds, 'dinner');
             return `
-              <button class="mp-pill ${focusedDay === d.index ? 'active' : ''} ${d.index === todayIdx ? 'today' : ''}" data-action="jump-day" data-day="${d.index}">
-                <span class="mp-pill-label">${d.short}</span>
+              <button class="mp-pill ${focusedDay === ds ? 'active' : ''} ${ds === today ? 'today' : ''}" data-action="jump-day" data-day="${ds}">
+                <span class="mp-pill-label">${ds === today ? 'Today' : dayShort(ds)}</span>
+                <span class="mp-pill-date">${parseISO(ds).getDate()}</span>
                 <span class="mp-dots">
                   <span class="mp-dot ${l?.recipe_id ? 'on' : ''}"></span>
                   <span class="mp-dot ${dn?.recipe_id ? 'on' : ''} ${dn?.is_meal_prep ? 'prep' : ''}"></span>
@@ -736,14 +804,15 @@ export async function mountMeals(container, navigate) {
         </div>
 
         <div class="mp-agenda">
-          ${DAYS_OF_WEEK.map(d => `
-            <section class="mp-day ${d.index === todayIdx ? 'is-today' : ''}" id="mp-day-${d.index}" data-day="${d.index}">
+          ${dates.map(ds => `
+            <section class="mp-day ${ds === today ? 'is-today' : ''}" id="mp-day-${ds}" data-day="${ds}">
               <header class="mp-day-header">
-                <h3>${d.label}</h3>
-                ${d.index === todayIdx ? '<span class="today-badge">Today</span>' : ''}
+                <h3>${dayName(ds)}</h3>
+                <span class="mp-day-date">${dayNice(ds)}</span>
+                ${relLabel(ds) ? `<span class="today-badge">${relLabel(ds)}</span>` : ''}
               </header>
-              ${renderSlot(d.index, 'lunch')}
-              ${renderSlot(d.index, 'dinner')}
+              ${renderSlot(ds, 'lunch')}
+              ${renderSlot(ds, 'dinner')}
             </section>
           `).join('')}
         </div>
@@ -761,7 +830,7 @@ export async function mountMeals(container, navigate) {
     if (!sheet) return '';
     const { day, slot } = sheet;
     const entry = getEntry(day, slot);
-    const dayLabel = DAYS_OF_WEEK[day].label;
+    const dayLabel = dayName(day);
     const slotLabel = slot === 'lunch' ? 'Lunch' : 'Dinner';
 
     if (sheet.type === 'picker') {
@@ -808,8 +877,8 @@ export async function mountMeals(container, navigate) {
             <button class="mp-sheet-close" data-action="close-sheet" aria-label="Close">&times;</button>
           </div>
           <div class="mp-sheet-body">
-            ${linked ? `<div class="mp-note mp-note-sage">🍱 Packed from ${DAYS_OF_WEEK[(day + 6) % 7].label} dinner — ingredients are already counted in that 2x cook. Just grab it from the fridge.</div>` : ''}
-            ${entry.is_meal_prep ? `<div class="mp-note mp-note-prep">Cooking <strong>2x</strong> tonight. Quantities below are doubled and also cover ${DAYS_OF_WEEK[nextDay(day)].label}'s lunch.</div>` : ''}
+            ${linked ? `<div class="mp-note mp-note-sage">🍱 Packed from ${dayName(addDays(day, -1))} dinner — ingredients are already counted in that 2x cook. Just grab it from the fridge.</div>` : ''}
+            ${entry.is_meal_prep ? `<div class="mp-note mp-note-prep">Cooking <strong>2x</strong> tonight. Quantities below are doubled and also cover ${dayName(nextDay(day))}'s lunch.</div>` : ''}
             <div class="mp-sheet-meta"><span class="mp-chip">⏱️ ${rec.prep_time_minutes || '?'}m</span>${(rec.tags || []).map(t => `<span class="mp-chip">${esc(t)}</span>`).join('')}</div>
 
             <h4 class="mp-sheet-h">Ingredients ${mult !== 1 ? `<span class="mp-mult">× ${mult}</span>` : ''}</h4>
@@ -914,9 +983,10 @@ export async function mountMeals(container, navigate) {
             ${items.map(item => `
               <div class="pantry-item-row">
                 <div class="pantry-item-info">
-                  <span class="pantry-item-name">${esc(item.ingredient_name)}</span>
+                  <span class="pantry-item-name">${esc(item.ingredient_name)} ${isStapleItem(item) ? '<span class="mp-chip mp-chip-good" title="Staples are never removed automatically">⭐ Staple</span>' : ''}</span>
                   <span class="pantry-item-meta">${esc(amountLabel(item))} ${amountLabel(item) ? '•' : ''} ${esc(item.category || 'Pantry')}</span>
                 </div>
+                <button class="btn-item-delete-sm" data-action="toggle-staple" data-id="${item.id}" title="${isStapleItem(item) ? 'Make it a normal item (auto-removed when cooked)' : 'Mark as staple (never auto-removed)'}" aria-label="Toggle staple">${isStapleItem(item) ? '★' : '☆'}</button>
                 <button class="btn-item-delete-sm" data-action="delete-pantry" data-id="${item.id}" title="Remove from pantry" aria-label="Remove ${esc(item.ingredient_name)} from pantry">🗑</button>
               </div>`).join('')}
             ${items.length === 0 ? '<p class="empty-col-note">Your pantry is empty. Add what you have, or tick off items on the shopping list.</p>' : ''}
@@ -1013,9 +1083,9 @@ export async function mountMeals(container, navigate) {
     dayObserver = new IntersectionObserver((entries) => {
       entries.forEach(en => {
         if (!en.isIntersecting) return;
-        focusedDay = parseInt(en.target.getAttribute('data-day'), 10);
+        focusedDay = en.target.getAttribute('data-day');
         container.querySelectorAll('.mp-pill').forEach(p => {
-          p.classList.toggle('active', parseInt(p.getAttribute('data-day'), 10) === focusedDay);
+          p.classList.toggle('active', p.getAttribute('data-day') === focusedDay);
         });
       });
     }, { rootMargin: '-25% 0px -60% 0px' });
@@ -1041,7 +1111,7 @@ export async function mountMeals(container, navigate) {
       const el = e.target.closest('[data-action]');
       if (!el || !shell.contains(el)) return;
       const action = el.getAttribute('data-action');
-      const d = parseInt(el.getAttribute('data-day'), 10);
+      const d = el.getAttribute('data-day');
       const slot = el.getAttribute('data-slot');
 
       // Backdrop click should only close when clicking the backdrop itself
@@ -1050,7 +1120,7 @@ export async function mountMeals(container, navigate) {
       switch (action) {
         case 'jump-day': {
           focusedDay = d;
-          shell.querySelectorAll('.mp-pill').forEach(p => p.classList.toggle('active', parseInt(p.getAttribute('data-day'), 10) === d));
+          shell.querySelectorAll('.mp-pill').forEach(p => p.classList.toggle('active', p.getAttribute('data-day') === d));
           shell.querySelector(`#mp-day-${d}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           break;
         }
@@ -1086,10 +1156,21 @@ export async function mountMeals(container, navigate) {
           await setMealPrep(d, el.getAttribute('data-prep') === '1');
           scrollSafeRender();
           break;
-        case 'toggle-cooked':
-          await toggleCooked(sheet.day, sheet.slot);
+        case 'toggle-cooked': {
+          const removed = await toggleCooked(sheet.day, sheet.slot);
+          scrollSafeRender();
+          if (removed?.length) toast(`Used up: ${removed.map(r => r.ingredient_name).join(', ')}`);
+          break;
+        }
+        case 'toggle-staple': {
+          const item = pantryItems.find(p => p.id === el.getAttribute('data-id'));
+          if (!item) break;
+          item.is_staple = !isStapleItem(item);
+          if (useDbBasic()) await supabase.from('pantry_items').update({ is_staple: item.is_staple }).eq('id', item.id);
+          else localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
           scrollSafeRender();
           break;
+        }
         case 'autofill':
           el.textContent = 'Filling...';
           await autoFillEmptySlots();
@@ -1299,6 +1380,50 @@ export async function mountMeals(container, navigate) {
     }
   }
 
+  // Past days: use up their ingredients from the pantry, then remove them so
+  // the calendar always starts at today and the freed slots appear at the back.
+  async function rolloverPastDays() {
+    const today = todayStr();
+    const past = planDays.filter(p => p.meal_date < today);
+    if (!past.length) return false;
+
+    const changes = newChanges();
+
+    // 1. Consume ingredients (once per entry; staples are never auto-removed)
+    const used = new Set();
+    past.filter(p => !p.ingredients_consumed).forEach(p => {
+      collectUsedIngredients(p).forEach(n => used.add(n));
+      changes.upsert.push(p);
+    });
+    await removeFromPantry(used);
+    // 2. Drop past entries, except dinners still feeding an upcoming linked lunch
+    //    (deleting those would cascade-delete the lunch).
+    const stillReferenced = new Set(
+      planDays.filter(p => p.meal_date >= today && p.source_meal_prep_id).map(p => p.source_meal_prep_id)
+    );
+    past.filter(p => !stillReferenced.has(p.id)).forEach(p => removeEntry(p, changes));
+    changes.upsert = changes.upsert.filter(p => planDays.includes(p));
+
+    await persist(changes);
+    return true;
+  }
+
+  async function refreshIfDayChanged() {
+    if (!container.isConnected) {
+      document.removeEventListener('visibilitychange', onVisible);
+      return;
+    }
+    if (todayStr() === lastRenderedDay) return;
+    lastRenderedDay = todayStr();
+    focusedDay = lastRenderedDay;
+    await rolloverPastDays();
+    scrollSafeRender();
+  }
+  const onVisible = () => { if (document.visibilityState === 'visible') refreshIfDayChanged(); };
+
   await loadAllData();
+  let lastRenderedDay = todayStr();
+  await rolloverPastDays();
+  document.addEventListener('visibilitychange', onVisible);
   render();
 }
