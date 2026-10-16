@@ -36,15 +36,15 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- 4. Initial Pantry Items
-INSERT INTO public.pantry_items (household_id, ingredient_name, normalized_name, quantity, unit, in_stock, category)
+INSERT INTO public.pantry_items (household_id, ingredient_name, normalized_name, quantity, unit, category)
 VALUES 
-  ('a0000000-0000-0000-0000-000000000001', 'Extra Virgin Olive Oil', 'extra virgin olive oil', 1, 'bottle', true, 'Pantry'),
-  ('a0000000-0000-0000-0000-000000000001', 'Garlic', 'garlic', 4, 'cloves', true, 'Produce'),
-  ('a0000000-0000-0000-0000-000000000001', 'Spaghetti', 'spaghetti', 500, 'g', true, 'Dry Goods'),
-  ('a0000000-0000-0000-0000-000000000001', 'Red Chili Flakes', 'red chili flakes', 1, 'jar', true, 'Spices'),
-  ('a0000000-0000-0000-0000-000000000001', 'Parmesan Cheese', 'parmesan cheese', 100, 'g', true, 'Dairy'),
-  ('a0000000-0000-0000-0000-000000000001', 'Sea Salt', 'sea salt', 1, 'pinch', true, 'Spices')
-ON CONFLICT (household_id, normalized_name) DO UPDATE SET in_stock = true;
+  ('a0000000-0000-0000-0000-000000000001', 'Extra Virgin Olive Oil', 'extra virgin olive oil', 1, 'bottle', 'Pantry'),
+  ('a0000000-0000-0000-0000-000000000001', 'Garlic', 'garlic', 4, 'cloves', 'Produce'),
+  ('a0000000-0000-0000-0000-000000000001', 'Spaghetti', 'spaghetti', 500, 'g', 'Dry Goods'),
+  ('a0000000-0000-0000-0000-000000000001', 'Red Chili Flakes', 'red chili flakes', 1, 'jar', 'Spices'),
+  ('a0000000-0000-0000-0000-000000000001', 'Parmesan Cheese', 'parmesan cheese', 100, 'g', 'Dairy'),
+  ('a0000000-0000-0000-0000-000000000001', 'Sea Salt', 'sea salt', 1, 'pinch', 'Spices')
+ON CONFLICT (household_id, normalized_name) DO NOTHING;
 
 -- 5. Curated Starter Recipes
 INSERT INTO public.recipes (id, household_id, title, description, instructions, prep_time_minutes, tags)

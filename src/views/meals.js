@@ -8,15 +8,22 @@ import {
 export async function mountMeals(container, navigate) {
   const household = await getActiveHousehold();
   let activeTab = 'planner'; // 'planner', 'recipes', 'pantry', 'shopping'
-  
+
+  // ---------------------------------------------------------------------------
   // State
+  // ---------------------------------------------------------------------------
   let recipes = [];
   let pantryItems = [];
   let activePlan = null;
-  let planDays = [];
+  let planDays = []; // one entry per (day_of_week, slot_type)
   let shoppingItems = [];
 
-  // Weekly Planner Tags Configuration
+  // UI state
+  let sheet = null; // { type: 'recipe' | 'picker', day, slot }
+  let showAddRecipe = false;
+  let focusedDay = (new Date().getDay() + 6) % 7; // highlighted mobile pill
+  let dayObserver = null;
+
   const DAYS_OF_WEEK = [
     { index: 0, label: 'Monday', short: 'Mon' },
     { index: 1, label: 'Tuesday', short: 'Tue' },
@@ -27,23 +34,17 @@ export async function mountMeals(container, navigate) {
     { index: 6, label: 'Sunday', short: 'Sun' }
   ];
 
-  let requestedTags = {
-    0: 'quick',
-    1: 'healthy',
-    2: 'pasta',
-    3: 'quick',
-    4: 'comfort',
-    5: 'weekend',
-    6: 'healthy'
+  const SLOT_TAGS = {
+    lunch: ['quick', 'salad', 'sandwich'],
+    dinner: ['quick', 'healthy', 'pasta', 'comfort']
   };
 
-  // Starter Curated Recipes with valid UUIDs
   const STARTER_RECIPES = [
     {
       id: 'b1000000-0000-0000-0000-000000000001',
       title: 'Spaghetti Aglio, Olio e Peperoncino',
       description: 'Classic Roman garlic, chili flakes, and golden olive oil pasta.',
-      instructions: 'Cook spaghetti al dente. In a pan, gently infuse olive oil with sliced garlic and red pepper flakes. Toss pasta with emulsion of pasta water. Top with parsley & parmesan.',
+      instructions: 'Cook spaghetti al dente.\nIn a pan, gently infuse olive oil with sliced garlic and red pepper flakes.\nToss pasta with emulsion of pasta water.\nTop with parsley & parmesan.',
       prep_time_minutes: 15,
       tags: ['quick', 'pasta', 'comfort', 'vegetarian'],
       recipe_ingredients: [
@@ -58,7 +59,7 @@ export async function mountMeals(container, navigate) {
       id: 'b1000000-0000-0000-0000-000000000002',
       title: 'Mediterranean Chickpea & Avocado Bowl',
       description: 'Crisp cucumbers, cherry tomatoes, creamy avocado, and lemon herb chickpeas.',
-      instructions: 'Rinse chickpeas. Chop cucumbers, tomatoes, and avocado. Toss with olive oil, lemon juice, salt, and crumbled feta.',
+      instructions: 'Rinse chickpeas.\nChop cucumbers, tomatoes, and avocado.\nToss with olive oil, lemon juice, salt, and crumbled feta.',
       prep_time_minutes: 20,
       tags: ['quick', 'healthy', 'vegetarian', 'salad'],
       recipe_ingredients: [
@@ -74,7 +75,7 @@ export async function mountMeals(container, navigate) {
       id: 'b1000000-0000-0000-0000-000000000003',
       title: 'Sheet Pan Salmon & Roasted Greens',
       description: 'Tender honey-dijon glazed salmon fillets with broccolini and baby potatoes.',
-      instructions: 'Roast halved potatoes 15 min at 200C. Add salmon fillets brushed with mustard-honey glaze and broccolini. Roast 12-14 min until tender.',
+      instructions: 'Roast halved potatoes 15 min at 200C.\nAdd salmon fillets brushed with mustard-honey glaze and broccolini.\nRoast 12-14 min until tender.',
       prep_time_minutes: 30,
       tags: ['healthy', 'weekend', 'high-protein'],
       recipe_ingredients: [
@@ -89,7 +90,7 @@ export async function mountMeals(container, navigate) {
       id: 'b1000000-0000-0000-0000-000000000004',
       title: 'Creamy Tomato & Basil Penne',
       description: 'Rich tomato cream sauce infused with garlic, shallots, and fresh basil.',
-      instructions: 'Saute garlic and shallots in butter. Pour in tomato passata and simmer. Stir in heavy cream and parmesan. Fold in boiled penne and fresh basil.',
+      instructions: 'Saute garlic and shallots in butter.\nPour in tomato passata and simmer.\nStir in heavy cream and parmesan.\nFold in boiled penne and fresh basil.',
       prep_time_minutes: 20,
       tags: ['pasta', 'comfort', 'quick', 'vegetarian'],
       recipe_ingredients: [
@@ -99,30 +100,127 @@ export async function mountMeals(container, navigate) {
         { ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 3, unit: 'cloves', category: 'Produce' },
         { ingredient_name: 'Fresh Basil', normalized_name: 'fresh basil', quantity: 1, unit: 'handful', category: 'Produce' }
       ]
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000005',
+      title: 'Caprese Ciabatta Sandwich',
+      description: 'Mozzarella, ripe tomato and basil pressed into toasted ciabatta.',
+      instructions: 'Slice ciabatta and toast lightly.\nLayer mozzarella, tomato slices and basil.\nDrizzle with olive oil and press closed.',
+      prep_time_minutes: 10,
+      tags: ['quick', 'sandwich', 'vegetarian'],
+      recipe_ingredients: [
+        { ingredient_name: 'Ciabatta Roll', normalized_name: 'ciabatta roll', quantity: 1, unit: 'whole', category: 'Bakery' },
+        { ingredient_name: 'Mozzarella', normalized_name: 'mozzarella', quantity: 125, unit: 'g', category: 'Dairy' },
+        { ingredient_name: 'Tomato', normalized_name: 'tomato', quantity: 1, unit: 'whole', category: 'Produce' },
+        { ingredient_name: 'Fresh Basil', normalized_name: 'fresh basil', quantity: 1, unit: 'handful', category: 'Produce' },
+        { ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 1, unit: 'tbsp', category: 'Pantry' }
+      ]
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000006',
+      title: 'Greek Orzo Salad',
+      description: 'Lemony orzo with feta, olives, cucumber and herbs - great cold.',
+      instructions: 'Boil orzo and rinse under cold water.\nToss with chopped cucumber, olives and feta.\nDress with lemon juice and olive oil.',
+      prep_time_minutes: 20,
+      tags: ['salad', 'quick', 'healthy', 'vegetarian'],
+      recipe_ingredients: [
+        { ingredient_name: 'Orzo', normalized_name: 'orzo', quantity: 200, unit: 'g', category: 'Dry Goods' },
+        { ingredient_name: 'Feta Cheese', normalized_name: 'feta cheese', quantity: 100, unit: 'g', category: 'Dairy' },
+        { ingredient_name: 'Kalamata Olives', normalized_name: 'kalamata olives', quantity: 60, unit: 'g', category: 'Canned Goods' },
+        { ingredient_name: 'Cucumber', normalized_name: 'cucumber', quantity: 1, unit: 'whole', category: 'Produce' },
+        { ingredient_name: 'Lemon', normalized_name: 'lemon', quantity: 1, unit: 'whole', category: 'Produce' }
+      ]
     }
   ];
 
-  // Starter Pantry items with valid UUIDs
+  // Offline/demo pantry: only things we actually have
   const STARTER_PANTRY = [
-    { id: 'p1000000-0000-0000-0000-000000000001', ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 1, unit: 'bottle', in_stock: true, category: 'Pantry' },
-    { id: 'p1000000-0000-0000-0000-000000000002', ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 4, unit: 'cloves', in_stock: true, category: 'Produce' },
-    { id: 'p1000000-0000-0000-0000-000000000003', ingredient_name: 'Spaghetti', normalized_name: 'spaghetti', quantity: 500, unit: 'g', in_stock: true, category: 'Dry Goods' },
-    { id: 'p1000000-0000-0000-0000-000000000004', ingredient_name: 'Red Chili Flakes', normalized_name: 'red chili flakes', quantity: 1, unit: 'jar', in_stock: true, category: 'Spices' },
-    { id: 'p1000000-0000-0000-0000-000000000005', ingredient_name: 'Parmesan Cheese', normalized_name: 'parmesan cheese', quantity: 100, unit: 'g', in_stock: true, category: 'Dairy' },
-    { id: 'p1000000-0000-0000-0000-000000000006', ingredient_name: 'Salmon Fillets', normalized_name: 'salmon fillets', quantity: 2, unit: 'fillets', in_stock: false, category: 'Meat & Seafood' },
-    { id: 'p1000000-0000-0000-0000-000000000007', ingredient_name: 'Avocado', normalized_name: 'avocado', quantity: 2, unit: 'whole', in_stock: false, category: 'Produce' }
+    { id: 'pantry-start-1', ingredient_name: 'Extra Virgin Olive Oil', normalized_name: 'extra virgin olive oil', quantity: 1, unit: 'bottle', category: 'Pantry' },
+    { id: 'pantry-start-2', ingredient_name: 'Garlic', normalized_name: 'garlic', quantity: 4, unit: 'cloves', category: 'Produce' },
+    { id: 'pantry-start-3', ingredient_name: 'Spaghetti', normalized_name: 'spaghetti', quantity: 500, unit: 'g', category: 'Dry Goods' },
+    { id: 'pantry-start-4', ingredient_name: 'Red Chili Flakes', normalized_name: 'red chili flakes', quantity: 1, unit: 'jar', category: 'Spices' },
+    { id: 'pantry-start-5', ingredient_name: 'Parmesan Cheese', normalized_name: 'parmesan cheese', quantity: 100, unit: 'g', category: 'Dairy' }
   ];
 
-  // Local storage cache keys for offline/demo
   const STORAGE_RECIPES_KEY = 'andinu_cache_recipes';
   const STORAGE_PANTRY_KEY = 'andinu_cache_pantry';
-  const STORAGE_PLAN_DAYS_KEY = 'andinu_cache_plan_days';
+  const STORAGE_PLAN_DAYS_KEY = 'andinu_cache_plan_slots_v2';
   const STORAGE_SHOPPING_KEY = 'andinu_cache_shopping';
+  const LOCAL_PLAN_ID = 'local-plan';
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const normName = (s) => String(s || '').toLowerCase().trim();
+  const useDb = () => Boolean(isSupabaseConfigured && household?.id && activePlan?.id);
+  const useDbBasic = () => Boolean(isSupabaseConfigured && household?.id);
+
+  function formatQty(n) {
+    if (typeof n !== 'number' || isNaN(n)) return '';
+    return String(Math.round(n * 100) / 100);
+  }
+
+  function parseAmount(text) {
+    const m = String(text || '').trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+    if (m) return { quantity: parseFloat(m[1].replace(',', '.')), unit: m[2] || '' };
+    return { quantity: 1, unit: String(text || '').trim() };
+  }
+
+  function amountLabel(item) {
+    const qty = item.quantity;
+    const unit = item.unit || '';
+    if (/^\d/.test(unit)) return unit;
+    if (qty == null || qty === '') return unit;
+    return `${formatQty(Number(qty))} ${unit}`.trim();
+  }
+
+  const recipeOf = (entry) => entry ? (recipes.find(r => r.id === entry.recipe_id) || entry.recipes || null) : null;
+  const getEntry = (d, s) => planDays.find(p => p.day_of_week === d && p.slot_type === s);
+  const nextDay = (d) => (d + 1) % 7; // Sunday -> Monday of the planned week
+  const isLinked = (entry) => Boolean(entry?.source_meal_prep_id);
+  const isInPantry = (norm) => pantryItems.some(p => normName(p.normalized_name || p.ingredient_name) === norm);
+
+  function newEntry(d, s) {
+    const e = {
+      id: generateUUID(),
+      meal_plan_id: activePlan?.id || LOCAL_PLAN_ID,
+      day_of_week: d,
+      slot_type: s,
+      recipe_id: null,
+      recipes: null,
+      requested_tag: null,
+      is_meal_prep: false,
+      servings_multiplier: 1,
+      source_meal_prep_id: null,
+      is_cooked: false
+    };
+    planDays.push(e);
+    return e;
+  }
+
+  function mondayDateString() {
+    const d = new Date();
+    const diff = d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1);
+    d.setDate(diff);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------------
+  async function reloadPantry() {
+    if (!useDbBasic()) return;
+    const { data, error } = await supabase.from('pantry_items').select('*').order('ingredient_name');
+    if (!error && data) pantryItems = data;
+  }
 
   async function loadAllData() {
+    let dbLoaded = false;
     if (isSupabaseConfigured && household?.id) {
       try {
-        // 1. Load Recipes with Ingredients
+        // 1. Recipes
         const { data: recs, error: recsErr } = await supabase
           .from('recipes')
           .select('*, recipe_ingredients(*)')
@@ -131,7 +229,6 @@ export async function mountMeals(container, navigate) {
         if (!recsErr && recs && recs.length > 0) {
           recipes = recs;
         } else if (!recsErr) {
-          // Auto-seed starter recipes into Supabase for this household
           for (const sr of STARTER_RECIPES) {
             const recipeId = generateUUID();
             const { data: created } = await supabase
@@ -165,43 +262,18 @@ export async function mountMeals(container, navigate) {
           }
         }
 
-        // 2. Load Pantry Items
+        // 2. Pantry (= only what we have; an empty pantry is a valid state)
         const { data: pantry, error: pantryErr } = await supabase
           .from('pantry_items')
           .select('*')
           .order('ingredient_name');
-
-        if (!pantryErr && pantry && pantry.length > 0) {
+        if (!pantryErr && pantry) {
           pantryItems = pantry;
-        } else if (!pantryErr) {
-          // Auto-seed starter pantry items into Supabase for this household
-          const pantryPayload = STARTER_PANTRY.map(p => ({
-            id: generateUUID(),
-            household_id: household.id,
-            ingredient_name: p.ingredient_name,
-            normalized_name: p.normalized_name,
-            quantity: p.quantity,
-            unit: p.unit,
-            in_stock: p.in_stock,
-            category: p.category
-          }));
-          const { data: createdPantry } = await supabase
-            .from('pantry_items')
-            .insert(pantryPayload)
-            .select();
-          if (createdPantry) {
-            pantryItems = createdPantry;
-          }
+          dbLoaded = true;
         }
 
-        // 3. Load Current Week's Meal Plan
-        const today = new Date();
-        const startOfWeek = new Date(today);
-        const day = startOfWeek.getDay();
-        const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Monday
-        startOfWeek.setDate(diff);
-        const weekDateStr = startOfWeek.toISOString().split('T')[0];
-
+        // 3. This week's plan
+        const weekDateStr = mondayDateString();
         let { data: plan } = await supabase
           .from('meal_plans')
           .select('*')
@@ -211,19 +283,11 @@ export async function mountMeals(container, navigate) {
         if (!plan) {
           const { data: newPlan, error: newPlanErr } = await supabase
             .from('meal_plans')
-            .insert([{ 
-              id: generateUUID(),
-              household_id: household.id, 
-              week_start_date: weekDateStr, 
-              title: 'Weekly Plan' 
-            }])
+            .insert([{ id: generateUUID(), household_id: household.id, week_start_date: weekDateStr, title: 'Weekly Plan' }])
             .select()
             .single();
-          if (!newPlanErr) {
-            plan = newPlan;
-          } else {
-            console.warn('Error creating weekly plan in Supabase:', newPlanErr);
-          }
+          if (!newPlanErr) plan = newPlan;
+          else console.warn('Error creating weekly plan in Supabase:', newPlanErr);
         }
 
         activePlan = plan;
@@ -234,1103 +298,1007 @@ export async function mountMeals(container, navigate) {
             .select('*, recipes(*, recipe_ingredients(*))')
             .eq('meal_plan_id', plan.id)
             .order('day_of_week');
-
-          if (days && days.length > 0) {
-            planDays = days;
-          }
+          planDays = (days || []).map(d => ({
+            ...d,
+            slot_type: d.slot_type || 'dinner',
+            servings_multiplier: d.servings_multiplier != null ? Number(d.servings_multiplier) : 1
+          }));
         }
 
-        // 4. Load Shopping Items
+        // 4. Shopping list
         const { data: shop } = await supabase
           .from('meal_shopping_items')
           .select('*')
           .order('is_checked', { ascending: true })
           .order('ingredient_name');
-
-        if (shop) {
-          shoppingItems = shop;
-        }
+        if (shop) shoppingItems = shop;
       } catch (err) {
         console.warn('Error loading meal prep data:', err);
       }
     }
 
-    // Fallbacks for offline/mock mode
+    // Offline / demo fallbacks
     if (recipes.length === 0) {
       const cached = localStorage.getItem(STORAGE_RECIPES_KEY);
       recipes = cached ? JSON.parse(cached) : [...STARTER_RECIPES];
     }
 
-    if (pantryItems.length === 0) {
+    if (!dbLoaded) {
       const cachedPantry = localStorage.getItem(STORAGE_PANTRY_KEY);
-      pantryItems = cachedPantry ? JSON.parse(cachedPantry) : [...STARTER_PANTRY];
+      pantryItems = cachedPantry
+        ? JSON.parse(cachedPantry).filter(p => p.in_stock !== false)
+        : [...STARTER_PANTRY];
     }
 
-    if (planDays.length === 0) {
+    if (!activePlan) {
       const cachedDays = localStorage.getItem(STORAGE_PLAN_DAYS_KEY);
-      if (cachedDays) {
-        planDays = JSON.parse(cachedDays);
-      } else {
-        planDays = DAYS_OF_WEEK.map((d, i) => ({
-          id: generateUUID(),
-          meal_plan_id: activePlan?.id || null,
-          day_of_week: d.index,
-          recipe_id: recipes[i % recipes.length]?.id,
-          recipes: recipes[i % recipes.length],
-          requested_tag: requestedTags[d.index] || 'quick',
-          is_cooked: false
-        }));
+      planDays = cachedDays ? JSON.parse(cachedDays) : [];
+      if (!isSupabaseConfigured || !household?.id) {
+        const cachedShop = localStorage.getItem(STORAGE_SHOPPING_KEY);
+        if (cachedShop) shoppingItems = JSON.parse(cachedShop);
       }
     }
   }
 
-  // --- ALGORITHM: PANTRY-OPTIMIZED RECIPE SCORER ---
-  function scoreRecipeForPantry(recipe, requestedTag) {
-    let score = 0;
-    const ingList = recipe.recipe_ingredients || [];
-    if (ingList.length === 0) return 0;
+  // ---------------------------------------------------------------------------
+  // Persistence for plan entries
+  // ---------------------------------------------------------------------------
+  function toRow(e) {
+    return {
+      id: e.id,
+      meal_plan_id: activePlan.id,
+      day_of_week: e.day_of_week,
+      slot_type: e.slot_type,
+      recipe_id: e.recipe_id || null,
+      requested_tag: e.requested_tag || null,
+      is_meal_prep: Boolean(e.is_meal_prep),
+      servings_multiplier: e.servings_multiplier,
+      source_meal_prep_id: e.source_meal_prep_id || null,
+      is_cooked: Boolean(e.is_cooked),
+      cooked_at: e.is_cooked ? (e.cooked_at || new Date().toISOString()) : null
+    };
+  }
 
-    // 1. Tag match bonus (+10 pts)
-    if (requestedTag && recipe.tags?.includes(requestedTag)) {
-      score += 10;
+  async function persist(changes) {
+    if (!useDb()) {
+      localStorage.setItem(STORAGE_PLAN_DAYS_KEY, JSON.stringify(planDays));
+      return;
     }
+    try {
+      if (changes.remove.length) {
+        await supabase.from('meal_plan_days').delete().in('id', changes.remove.map(e => e.id));
+      }
+      const unique = new Map();
+      changes.upsert.forEach(e => unique.set(e.id, e));
+      const rows = Array.from(unique.values()).map(toRow);
+      // Sources (dinners) first so linked lunches can reference them
+      const groups = [rows.filter(r => !r.source_meal_prep_id), rows.filter(r => r.source_meal_prep_id)];
+      for (const group of groups) {
+        if (!group.length) continue;
+        const { error } = await supabase
+          .from('meal_plan_days')
+          .upsert(group, { onConflict: 'meal_plan_id,day_of_week,slot_type' });
+        if (error) console.warn('Error saving meal plan entries:', error);
+      }
+    } catch (e) {
+      console.warn('Error saving plan to Supabase:', e);
+    }
+  }
 
-    // 2. Pantry in-stock coverage bonus (up to 20 pts)
+  const newChanges = () => ({ upsert: [], remove: [] });
+
+  function removeEntry(entry, changes) {
+    planDays = planDays.filter(p => p !== entry);
+    changes.remove.push(entry);
+  }
+
+  // Keep next day's Lunch in sync with day N's Dinner (meal prep carryover).
+  function syncCarryover(d, changes) {
+    const dinner = getEntry(d, 'dinner');
+    const nd = nextDay(d);
+    const lunch = getEntry(nd, 'lunch');
+    const active = dinner && dinner.is_meal_prep && dinner.recipe_id;
+
+    if (active) {
+      const l = lunch || newEntry(nd, 'lunch');
+      l.recipe_id = dinner.recipe_id;
+      l.recipes = recipeOf(dinner);
+      l.source_meal_prep_id = dinner.id;
+      l.servings_multiplier = 0; // already counted in the 2x dinner
+      l.is_meal_prep = false;
+      l.is_cooked = false;
+      changes.upsert.push(l);
+    } else if (lunch && lunch.source_meal_prep_id && (!dinner || lunch.source_meal_prep_id === dinner.id)) {
+      removeEntry(lunch, changes);
+    }
+  }
+
+  async function setRecipe(d, s, recipeId) {
+    const changes = newChanges();
+    let entry = getEntry(d, s);
+
+    if (!recipeId) {
+      if (entry && !isLinked(entry)) {
+        removeEntry(entry, changes);
+        if (s === 'dinner') syncCarryover(d, changes);
+      }
+    } else {
+      if (entry && isLinked(entry)) return; // locked
+      entry = entry || newEntry(d, s);
+      entry.recipe_id = recipeId;
+      entry.recipes = recipes.find(r => r.id === recipeId) || null;
+      entry.is_cooked = false;
+      if (s === 'dinner') entry.servings_multiplier = entry.is_meal_prep ? 2 : 1;
+      changes.upsert.push(entry);
+      if (s === 'dinner') syncCarryover(d, changes);
+    }
+    await persist(changes);
+  }
+
+  async function setMealPrep(d, on) {
+    const dinner = getEntry(d, 'dinner');
+    if (!dinner || !dinner.recipe_id) return;
+    const changes = newChanges();
+    dinner.is_meal_prep = on;
+    dinner.servings_multiplier = on ? 2 : 1;
+    changes.upsert.push(dinner);
+    syncCarryover(d, changes);
+    await persist(changes);
+  }
+
+  async function toggleCooked(d, s) {
+    const entry = getEntry(d, s);
+    if (!entry) return;
+    entry.is_cooked = !entry.is_cooked;
+    entry.cooked_at = entry.is_cooked ? new Date().toISOString() : null;
+    const changes = newChanges();
+    changes.upsert.push(entry);
+    await persist(changes);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Suggestion algorithm (pantry-optimised)
+  // ---------------------------------------------------------------------------
+  function scoreRecipeForPantry(recipe, requestedTag) {
+    const ingList = recipe?.recipe_ingredients || [];
+    if (ingList.length === 0) return { score: 0, inStockCount: 0, totalCount: 0, coveragePercent: 0 };
+
+    let score = 0;
+    if (requestedTag && recipe.tags?.includes(requestedTag)) score += 10;
+
     let inStockCount = 0;
     ingList.forEach(ing => {
-      const norm = (ing.normalized_name || ing.ingredient_name || '').toLowerCase().trim();
-      const inStock = pantryItems.some(p => p.normalized_name === norm && p.in_stock);
-      if (inStock) inStockCount++;
+      if (isInPantry(normName(ing.normalized_name || ing.ingredient_name))) inStockCount++;
     });
 
     const coverageRatio = inStockCount / ingList.length;
     score += coverageRatio * 20;
 
-    // Return composite score + stats
-    return {
-      score,
-      inStockCount,
-      totalCount: ingList.length,
-      coveragePercent: Math.round(coverageRatio * 100)
-    };
+    return { score, inStockCount, totalCount: ingList.length, coveragePercent: Math.round(coverageRatio * 100) };
+  }
+
+  function suggestRecipe(tag, usedIds) {
+    if (recipes.length === 0) return null;
+    let pool = recipes;
+    if (tag) {
+      const tagged = pool.filter(r => (r.tags || []).includes(tag));
+      if (tagged.length) pool = tagged;
+    }
+    const fresh = pool.filter(r => !usedIds.has(r.id));
+    if (fresh.length) pool = fresh;
+    const top = pool
+      .map(r => ({ r, s: scoreRecipeForPantry(r, tag).score }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 3);
+    return top[Math.floor(Math.random() * top.length)].r;
+  }
+
+  const usedRecipeIds = () => new Set(planDays.map(p => p.recipe_id).filter(Boolean));
+
+  async function autoFillEmptySlots() {
+    const used = usedRecipeIds();
+    for (const day of DAYS_OF_WEEK) {
+      for (const slot of ['dinner', 'lunch']) {
+        const existing = getEntry(day.index, slot);
+        if (existing?.recipe_id) continue; // keeps manual choices & locked meal-prep lunches
+        const tag = SLOT_TAGS[slot][(day.index + (slot === 'lunch' ? 0 : 1)) % SLOT_TAGS[slot].length];
+        const pick = suggestRecipe(tag, used);
+        if (!pick) return;
+        used.add(pick.id);
+        await setRecipe(day.index, slot, pick.id);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shopping list generation
+  // ---------------------------------------------------------------------------
+  function computeWeeklyNeeds() {
+    const totals = new Map();
+    planDays.forEach(entry => {
+      const rec = recipeOf(entry);
+      if (!rec) return;
+      const mult = entry.servings_multiplier != null ? Number(entry.servings_multiplier) : 1;
+      if (mult <= 0) return; // linked meal-prep lunch: already counted in 2x dinner
+      (rec.recipe_ingredients || []).forEach(ing => {
+        const norm = normName(ing.normalized_name || ing.ingredient_name);
+        if (!norm) return;
+        const unit = ing.unit || '';
+        const key = `${norm}|${unit}`;
+        const qty = (typeof ing.quantity === 'number' ? ing.quantity : parseFloat(ing.quantity) || 1) * mult;
+        if (totals.has(key)) totals.get(key).quantity += qty;
+        else totals.set(key, { ingredient_name: ing.ingredient_name, normalized_name: norm, quantity: qty, unit, category: ing.category || 'Groceries' });
+      });
+    });
+    return Array.from(totals.values());
+  }
+
+  async function generateShoppingList() {
+    if (!planDays.some(p => p.recipe_id)) {
+      toast('Plan at least one meal first.');
+      return false;
+    }
+    const planKey = activePlan?.id || LOCAL_PLAN_ID;
+    const manualUnchecked = new Set(
+      shoppingItems.filter(s => !s.is_checked && s.meal_plan_id !== planKey).map(s => normName(s.normalized_name || s.ingredient_name))
+    );
+
+    // Drop previously generated, not-yet-bought items so regenerating stays accurate
+    const stale = shoppingItems.filter(s => !s.is_checked && s.meal_plan_id === planKey);
+    shoppingItems = shoppingItems.filter(s => !stale.includes(s));
+    if (stale.length && useDbBasic()) {
+      await supabase.from('meal_shopping_items').delete().in('id', stale.map(s => s.id));
+    }
+
+    const needed = computeWeeklyNeeds().filter(n => !isInPantry(n.normalized_name) && !manualUnchecked.has(n.normalized_name));
+
+    const payload = needed.map(n => ({
+      id: generateUUID(),
+      household_id: household?.id,
+      meal_plan_id: planKey,
+      ingredient_name: n.ingredient_name,
+      normalized_name: n.normalized_name,
+      quantity: Math.round(n.quantity * 100) / 100,
+      unit: n.unit,
+      category: n.category,
+      is_checked: false
+    }));
+
+    if (payload.length && useDbBasic()) {
+      const dbPayload = payload.map(p => ({ ...p, meal_plan_id: activePlan?.id || null }));
+      const { data, error } = await supabase.from('meal_shopping_items').insert(dbPayload).select();
+      if (error) {
+        toast(`Failed to build list: ${error.message}`);
+        return false;
+      }
+      shoppingItems = [...(data || []), ...shoppingItems];
+    } else if (payload.length) {
+      shoppingItems = [...payload, ...shoppingItems];
+    }
+    if (!useDbBasic()) localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
+
+    // In DB mode generated rows reference the real plan id
+    return payload.length;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------------
+  function scrollSafeRender() {
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
   }
 
   function render() {
+    if (dayObserver) { dayObserver.disconnect(); dayObserver = null; }
+    document.body.classList.toggle('mp-sheet-open', Boolean(sheet) || showAddRecipe);
+
+    const pendingShop = shoppingItems.filter(s => !s.is_checked).length;
+
     container.innerHTML = `
       <div class="meals-view-shell">
-        <!-- View Header -->
         <div class="view-header">
           <div>
-            <h1 class="view-title">Kitchen & Meal Prep</h1>
-            <p class="view-subtitle">Pantry inventory, smart weekly planner & recipe box</p>
+            <h1 class="view-title">Kitchen &amp; Meal Prep</h1>
+            <p class="view-subtitle">Lunch &amp; dinner planner, pantry and recipe box</p>
           </div>
-          <div class="pantry-stock-pill" title="Pantry in-stock overview">
+          <div class="pantry-stock-pill" title="Ingredients you have on hand">
             <span>🥫</span>
-            <span>${pantryItems.filter(p => p.in_stock).length} / ${pantryItems.length} In Stock</span>
+            <span>${pantryItems.length} in Pantry</span>
           </div>
         </div>
 
-        <!-- Sub-Nav Tabs -->
         <nav class="subnav-tabs-bar glass-panel">
-          <button class="subnav-tab ${activeTab === 'planner' ? 'active' : ''}" data-tab="planner">
-            📅 Weekly Planner
-          </button>
+          <button class="subnav-tab ${activeTab === 'planner' ? 'active' : ''}" data-tab="planner">📅 Weekly Planner</button>
           <button class="subnav-tab ${activeTab === 'shopping' ? 'active' : ''}" data-tab="shopping">
-            🛒 Shopping List ${shoppingItems.filter(s => !s.is_checked).length ? `<span class="tab-badge">${shoppingItems.filter(s => !s.is_checked).length}</span>` : ''}
+            🛒 Shopping List ${pendingShop ? `<span class="tab-badge">${pendingShop}</span>` : ''}
           </button>
-          <button class="subnav-tab ${activeTab === 'pantry' ? 'active' : ''}" data-tab="pantry">
-            🥫 Pantry Inventory
-          </button>
-          <button class="subnav-tab ${activeTab === 'recipes' ? 'active' : ''}" data-tab="recipes">
-            📖 Recipe Library (${recipes.length})
-          </button>
+          <button class="subnav-tab ${activeTab === 'pantry' ? 'active' : ''}" data-tab="pantry">🥫 Pantry</button>
+          <button class="subnav-tab ${activeTab === 'recipes' ? 'active' : ''}" data-tab="recipes">📖 Recipes (${recipes.length})</button>
         </nav>
 
-        <!-- Dynamic Sub-view Content -->
-        <div class="tab-content-area">
-          ${renderTabContent()}
-        </div>
+        <div class="tab-content-area">${renderTabContent()}</div>
+        ${renderSheet()}
       </div>
     `;
 
     attachEvents();
+    if (activeTab === 'planner') setupDayObserver();
   }
 
   function renderTabContent() {
     switch (activeTab) {
-      case 'planner':
-        return renderPlannerView();
-      case 'shopping':
-        return renderShoppingView();
-      case 'pantry':
-        return renderPantryView();
-      case 'recipes':
-        return renderRecipesView();
-      default:
-        return '';
+      case 'planner': return renderPlannerView();
+      case 'shopping': return renderShoppingView();
+      case 'pantry': return renderPantryView();
+      case 'recipes': return renderRecipesView();
+      default: return '';
     }
   }
 
-  // =========================================================================
-  // 1. WEEKLY PLANNER VIEW
-  // =========================================================================
+  // --- PLANNER ---------------------------------------------------------------
+  function coverageBadge(recipe, mult) {
+    const stats = scoreRecipeForPantry(recipe, null);
+    if (!stats.totalCount) return '';
+    return `<span class="mp-chip ${stats.coveragePercent >= 75 ? 'mp-chip-good' : ''}">🥫 ${stats.inStockCount}/${stats.totalCount} in pantry</span>`;
+  }
+
+  function renderSlot(d, slot) {
+    const entry = getEntry(d, slot);
+    const rec = recipeOf(entry);
+    const isLunch = slot === 'lunch';
+    const icon = isLunch ? '☀️' : '🌙';
+    const label = isLunch ? 'Lunch' : 'Dinner';
+    const dayName = DAYS_OF_WEEK[d].label;
+
+    // Lunch auto-filled by yesterday's meal prep dinner
+    if (isLunch && entry && isLinked(entry) && rec) {
+      const prevLabel = DAYS_OF_WEEK[(d + 6) % 7].label;
+      return `
+        <div class="mp-slot mp-slot-linked ${entry.is_cooked ? 'is-cooked' : ''}">
+          <div class="mp-slot-head"><span class="mp-slot-name">${icon} ${label}</span><span class="mp-lock">🔒 Locked</span></div>
+          <button class="mp-slot-main" data-action="open-sheet" data-day="${d}" data-slot="${slot}">
+            <span class="mp-linked-badge">🍱 Meal Prep from ${prevLabel} — Ready in Fridge</span>
+            <span class="mp-slot-title">${esc(rec.title)}</span>
+            <span class="mp-slot-meta">No extra prep needed ${entry.is_cooked ? '• ✓ Eaten' : ''}</span>
+          </button>
+        </div>`;
+    }
+
+    if (entry && rec) {
+      const isPrep = slot === 'dinner' && entry.is_meal_prep;
+      return `
+        <div class="mp-slot ${isPrep ? 'mp-slot-prep' : ''} ${entry.is_cooked ? 'is-cooked' : ''}">
+          <div class="mp-slot-head">
+            <span class="mp-slot-name">${icon} ${label}</span>
+            ${isPrep ? `<span class="mp-prep-badge">2x Portions • Packs ${DAYS_OF_WEEK[nextDay(d)].label}'s Lunch</span>` : ''}
+          </div>
+          <button class="mp-slot-main" data-action="open-sheet" data-day="${d}" data-slot="${slot}">
+            <span class="mp-slot-title">${esc(rec.title)}</span>
+            <span class="mp-slot-meta">
+              <span class="mp-chip">⏱️ ${rec.prep_time_minutes || '?'}m</span>
+              ${coverageBadge(rec)}
+              ${entry.is_cooked ? '<span class="mp-chip mp-chip-good">✓ Cooked</span>' : ''}
+            </span>
+          </button>
+          ${slot === 'dinner' ? `
+            <div class="mp-seg" role="group" aria-label="Dinner portions for ${dayName}">
+              <button class="mp-seg-btn ${!isPrep ? 'active' : ''}" data-action="set-prep" data-day="${d}" data-prep="0">🍽️ 1x Dinner</button>
+              <button class="mp-seg-btn ${isPrep ? 'active prep' : ''}" data-action="set-prep" data-day="${d}" data-prep="1">🍱 2x Meal Prep <small>(+Tomorrow's Lunch)</small></button>
+            </div>
+            ${isPrep ? `<div class="mp-connector">↓ Covers ${DAYS_OF_WEEK[nextDay(d)].label}'s lunch</div>` : ''}
+          ` : ''}
+        </div>`;
+    }
+
+    // Empty slot
+    return `
+      <div class="mp-slot mp-slot-empty">
+        <div class="mp-slot-head"><span class="mp-slot-name">${icon} ${label}</span></div>
+        <button class="mp-add-btn" data-action="open-picker" data-day="${d}" data-slot="${slot}">+ Add / Suggest ${label}</button>
+        <div class="mp-tag-row">
+          ${SLOT_TAGS[slot].map(t => `<button class="mp-tag-pill" data-action="suggest" data-day="${d}" data-slot="${slot}" data-tag="${t}">${t}</button>`).join('')}
+        </div>
+      </div>`;
+  }
+
   function renderPlannerView() {
+    const todayIdx = (new Date().getDay() + 6) % 7;
+    const plannedCount = planDays.filter(p => p.recipe_id).length;
+
     return `
       <div class="planner-view">
-        <!-- Generator Controls Bar -->
-        <div class="planner-hero glass-panel">
-          <div class="planner-hero-text">
-            <h3>Smart Pantry Meal Generator</h3>
-            <p>Scores your recipes to maximize current pantry ingredients and minimize food waste.</p>
+        <div class="mp-hero">
+          <div class="mp-hero-text">
+            <h2>This Week's Menu</h2>
+            <p>${plannedCount} of 14 meals planned. Turn a dinner into 2x Meal Prep to cover tomorrow's lunch.</p>
           </div>
-          <div class="planner-hero-actions">
-            <button id="btn-generate-plan" class="btn-primary-start" style="width: auto; padding: 10px 18px;">
-              ✨ Auto-Generate Week
-            </button>
-            <button id="btn-sync-to-shopping" class="btn-secondary" style="padding: 10px 14px;">
-              🛒 Export to Shopping List
-            </button>
+          <div class="mp-hero-actions">
+            <button class="btn-secondary" data-action="autofill">✨ Auto-fill empty slots</button>
+            <button class="mp-primary-btn" data-action="generate-shopping">🛒 Generate Shopping List for This Week</button>
           </div>
         </div>
 
-        <!-- Days Grid / Calendar View -->
-        <div class="planner-calendar-grid">
+        <div class="mp-pills" role="tablist" aria-label="Day of week">
           ${DAYS_OF_WEEK.map(d => {
-            const planDay = planDays.find(p => p.day_of_week === d.index);
-            const assignedRecipe = planDay?.recipes || recipes.find(r => r.id === planDay?.recipe_id) || null;
-            const reqTag = planDay?.requested_tag || requestedTags[d.index] || 'quick';
-            const stats = assignedRecipe ? scoreRecipeForPantry(assignedRecipe, reqTag) : null;
-            const isToday = new Date().getDay() === (d.index === 6 ? 0 : d.index + 1);
-
+            const l = getEntry(d.index, 'lunch');
+            const dn = getEntry(d.index, 'dinner');
             return `
-              <div class="calendar-day-card glass-panel ${isToday ? 'is-today' : ''} ${planDay?.is_cooked ? 'is-cooked' : ''}">
-                <div class="day-card-header">
-                  <div class="day-info">
-                    <span class="day-name">${d.label}</span>
-                    ${isToday ? '<span class="today-badge">Today</span>' : ''}
-                  </div>
-                  <!-- Tag Preference Selector -->
-                  <select class="select-day-tag" data-day-index="${d.index}" title="Requested meal style">
-                    ${['quick', 'healthy', 'pasta', 'comfort', 'weekend', 'vegetarian', 'high-protein'].map(t => `
-                      <option value="${t}" ${reqTag === t ? 'selected' : ''}>${t}</option>
-                    `).join('')}
-                  </select>
-                </div>
-
-                <div class="day-card-body">
-                  ${assignedRecipe ? `
-                    <div class="assigned-recipe-box">
-                      <h4 class="recipe-assigned-title">${assignedRecipe.title}</h4>
-                      <div class="recipe-assigned-meta">
-                        <span>⏱️ ${assignedRecipe.prep_time_minutes}m</span>
-                        ${stats ? `
-                          <span class="pantry-coverage-badge ${stats.coveragePercent >= 75 ? 'coverage-high' : 'coverage-mid'}">
-                            🥫 ${stats.inStockCount}/${stats.totalCount} in stock (${stats.coveragePercent}%)
-                          </span>
-                        ` : ''}
-                      </div>
-
-                      <!-- Ingredients Preview -->
-                      <div class="day-ingredients-snippet">
-                        ${(assignedRecipe.recipe_ingredients || []).slice(0, 3).map(ing => {
-                          const norm = (ing.normalized_name || ing.ingredient_name).toLowerCase().trim();
-                          const hasStock = pantryItems.some(p => p.normalized_name === norm && p.in_stock);
-                          return `
-                            <span class="ing-pill ${hasStock ? 'has-stock' : 'needs-stock'}">
-                              ${hasStock ? '✓' : '•'} ${ing.ingredient_name}
-                            </span>
-                          `;
-                        }).join('')}
-                        ${(assignedRecipe.recipe_ingredients?.length || 0) > 3 ? `<span class="ing-pill-more">+${assignedRecipe.recipe_ingredients.length - 3} more</span>` : ''}
-                      </div>
-                    </div>
-                  ` : `
-                    <div class="unassigned-day-box">
-                      <span>No recipe scheduled</span>
-                    </div>
-                  `}
-                </div>
-
-                <div class="day-card-footer">
-                  <select class="select-swap-recipe" data-day-index="${d.index}">
-                    <option value="">-- Swap Recipe --</option>
-                    ${recipes.map(r => `
-                      <option value="${r.id}" ${r.id === assignedRecipe?.id ? 'selected' : ''}>
-                        ${r.title} (${r.prep_time_minutes}m)
-                      </option>
-                    `).join('')}
-                  </select>
-
-                  <button 
-                    class="btn-mark-cooked ${planDay?.is_cooked ? 'cooked' : ''}" 
-                    data-day-index="${d.index}"
-                    title="${planDay?.is_cooked ? 'Mark as uncooked' : 'Mark as cooked'}"
-                  >
-                    ${planDay?.is_cooked ? '✓ Cooked' : 'Mark Cooked'}
-                  </button>
-                </div>
-              </div>
-            `;
+              <button class="mp-pill ${focusedDay === d.index ? 'active' : ''} ${d.index === todayIdx ? 'today' : ''}" data-action="jump-day" data-day="${d.index}">
+                <span class="mp-pill-label">${d.short}</span>
+                <span class="mp-dots">
+                  <span class="mp-dot ${l?.recipe_id ? 'on' : ''}"></span>
+                  <span class="mp-dot ${dn?.recipe_id ? 'on' : ''} ${dn?.is_meal_prep ? 'prep' : ''}"></span>
+                </span>
+              </button>`;
           }).join('')}
+        </div>
+
+        <div class="mp-agenda">
+          ${DAYS_OF_WEEK.map(d => `
+            <section class="mp-day ${d.index === todayIdx ? 'is-today' : ''}" id="mp-day-${d.index}" data-day="${d.index}">
+              <header class="mp-day-header">
+                <h3>${d.label}</h3>
+                ${d.index === todayIdx ? '<span class="today-badge">Today</span>' : ''}
+              </header>
+              ${renderSlot(d.index, 'lunch')}
+              ${renderSlot(d.index, 'dinner')}
+            </section>
+          `).join('')}
+        </div>
+
+        <div class="mp-bottom-cta">
+          <button class="mp-primary-btn" data-action="generate-shopping">🛒 Generate Shopping List for This Week</button>
         </div>
       </div>
     `;
   }
 
-  // =========================================================================
-  // 2. SHOPPING LIST VIEW
-  // =========================================================================
-  function renderShoppingView() {
-    const checkedCount = shoppingItems.filter(s => s.is_checked).length;
-    const totalCount = shoppingItems.length;
+  // --- BOTTOM SHEET ----------------------------------------------------------
+  function renderSheet() {
+    if (showAddRecipe) return renderAddRecipeModal();
+    if (!sheet) return '';
+    const { day, slot } = sheet;
+    const entry = getEntry(day, slot);
+    const dayLabel = DAYS_OF_WEEK[day].label;
+    const slotLabel = slot === 'lunch' ? 'Lunch' : 'Dinner';
 
-    // Sort pending items first, completed below
-    const sortedShopping = [...shoppingItems].sort((a, b) => {
-      if (a.is_checked !== b.is_checked) return a.is_checked ? 1 : -1;
-      return (a.ingredient_name || '').localeCompare(b.ingredient_name || '');
-    });
+    if (sheet.type === 'picker') {
+      const sorted = [...recipes].sort((a, b) => scoreRecipeForPantry(b, null).score - scoreRecipeForPantry(a, null).score);
+      return `
+        <div class="mp-sheet-backdrop" data-action="close-sheet">
+          <div class="mp-sheet" role="dialog" aria-label="Choose ${slotLabel}">
+            <div class="mp-sheet-grab"></div>
+            <div class="mp-sheet-head">
+              <div><span class="mp-sheet-kicker">${dayLabel} ${slotLabel}</span><h3>Choose a recipe</h3></div>
+              <button class="mp-sheet-close" data-action="close-sheet" aria-label="Close">&times;</button>
+            </div>
+            <div class="mp-sheet-body">
+              ${sorted.map(r => `
+                <button class="mp-picker-row" data-action="choose-recipe" data-recipe-id="${r.id}">
+                  <span class="mp-picker-title">${esc(r.title)}</span>
+                  <span class="mp-slot-meta"><span class="mp-chip">⏱️ ${r.prep_time_minutes || '?'}m</span>${coverageBadge(r)}${(r.tags || []).slice(0, 2).map(t => `<span class="mp-chip">${esc(t)}</span>`).join('')}</span>
+                </button>`).join('')}
+              ${entry?.recipe_id && !isLinked(entry) ? `<button class="mp-picker-row mp-picker-clear" data-action="choose-recipe" data-recipe-id="">🍴 Eating out / leave empty</button>` : ''}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // Recipe quick-view
+    const rec = recipeOf(entry);
+    if (!entry || !rec) return '';
+    const linked = isLinked(entry);
+    const mult = linked ? 1 : (Number(entry.servings_multiplier) || 1);
+    const steps = String(rec.instructions || '')
+      .split(/\n|(?<=\.)\s+(?=[A-Z])/)
+      .map(s => s.replace(/^\s*\d+[.)]\s*/, '').trim())
+      .filter(Boolean);
+
+    return `
+      <div class="mp-sheet-backdrop" data-action="close-sheet">
+        <div class="mp-sheet" role="dialog" aria-label="${esc(rec.title)}">
+          <div class="mp-sheet-grab"></div>
+          <div class="mp-sheet-head">
+            <div>
+              <span class="mp-sheet-kicker">${dayLabel} ${slotLabel}${entry.is_meal_prep ? ' • 🍱 Meal Prep 2x' : ''}</span>
+              <h3>${esc(rec.title)}</h3>
+            </div>
+            <button class="mp-sheet-close" data-action="close-sheet" aria-label="Close">&times;</button>
+          </div>
+          <div class="mp-sheet-body">
+            ${linked ? `<div class="mp-note mp-note-sage">🍱 Packed from ${DAYS_OF_WEEK[(day + 6) % 7].label} dinner — ingredients are already counted in that 2x cook. Just grab it from the fridge.</div>` : ''}
+            ${entry.is_meal_prep ? `<div class="mp-note mp-note-prep">Cooking <strong>2x</strong> tonight. Quantities below are doubled and also cover ${DAYS_OF_WEEK[nextDay(day)].label}'s lunch.</div>` : ''}
+            <div class="mp-sheet-meta"><span class="mp-chip">⏱️ ${rec.prep_time_minutes || '?'}m</span>${(rec.tags || []).map(t => `<span class="mp-chip">${esc(t)}</span>`).join('')}</div>
+
+            <h4 class="mp-sheet-h">Ingredients ${mult !== 1 ? `<span class="mp-mult">× ${mult}</span>` : ''}</h4>
+            <ul class="mp-ing-list">
+              ${(rec.recipe_ingredients || []).map(ing => {
+                const has = isInPantry(normName(ing.normalized_name || ing.ingredient_name));
+                const q = typeof ing.quantity === 'number' ? formatQty(ing.quantity * mult) : '';
+                return `<li class="${has ? 'has' : ''}"><span class="mp-ing-qty">${q} ${esc(ing.unit || '')}</span><span class="mp-ing-name">${esc(ing.ingredient_name)}</span>${has ? '<span class="mp-ing-have">✓ in pantry</span>' : ''}</li>`;
+              }).join('')}
+            </ul>
+
+            ${steps.length && !linked ? `
+              <h4 class="mp-sheet-h">Instructions</h4>
+              <ol class="mp-steps">${steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
+          </div>
+          <div class="mp-sheet-foot">
+            <button class="mp-primary-btn ${entry.is_cooked ? 'done' : ''}" data-action="toggle-cooked">${entry.is_cooked ? '✓ Cooked — tap to undo' : linked ? 'Mark as Eaten' : 'Mark as Cooked'}</button>
+            ${linked ? '' : `<button class="btn-secondary" data-action="open-picker" data-day="${day}" data-slot="${slot}">Change</button>`}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // --- SHOPPING --------------------------------------------------------------
+  function renderShoppingView() {
+    const pending = shoppingItems.filter(s => !s.is_checked).sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.ingredient_name || '').localeCompare(b.ingredient_name || ''));
+    const purchased = shoppingItems.filter(s => s.is_checked);
+
+    const row = (item) => `
+      <div class="item-card glass-panel ${item.is_checked ? 'is-completed' : ''}" data-shop-id="${item.id}">
+        <label class="custom-checkbox-wrap">
+          <input type="checkbox" class="shop-checkbox" data-shop-check-id="${item.id}" ${item.is_checked ? 'checked' : ''} />
+          <span class="checkbox-box"></span>
+        </label>
+        <div class="item-text-content">
+          <span class="item-name">${esc(item.ingredient_name)}</span>
+          ${item.quantity || item.unit ? `<span class="item-note">${esc(amountLabel(item))}</span>` : ''}
+        </div>
+        <span class="shop-category-tag">${esc(item.category || 'Groceries')}</span>
+        <button class="btn-item-delete" data-action="delete-shop" data-id="${item.id}" title="Remove item" aria-label="Remove item">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>`;
 
     return `
       <div class="shopping-view">
         <div class="shopping-header glass-panel">
           <div>
-            <h3 style="font-family: var(--font-heading);">Weekly Meal Shopping List</h3>
-            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 2px;">
-              Ticking off an item automatically updates your Pantry inventory to <strong>In Stock</strong> in real time.
+            <h3 style="font-family: 'Newsreader', Georgia, serif;">Shopping List</h3>
+            <p style="color: var(--app-text-muted, #666059); font-size: 0.85rem; margin-top: 2px;">
+              Tick an item while you shop and it moves straight into your <strong>Pantry</strong>.
             </p>
           </div>
           <div class="shopping-actions-group">
-            <button id="btn-auto-calc-shopping" class="btn-primary-start" style="width: auto; padding: 8px 16px; font-size: 0.84rem;">
-              ⚡ Auto-Fill Missing from Plan
-            </button>
-            <button id="btn-clear-checked-shopping" class="btn-secondary" style="padding: 8px 12px; font-size: 0.84rem;">
-              Clear Checked
-            </button>
+            <button class="mp-primary-btn compact" data-action="generate-shopping">🛒 Generate from This Week</button>
           </div>
         </div>
 
-        <!-- Add Manual Shopping Item Form -->
         <form id="form-add-shopping-item" class="add-item-card glass-panel" style="margin-bottom: 16px;">
           <div class="add-item-row">
-            <input 
-              type="text" 
-              id="input-shop-item-name" 
-              class="text-input" 
-              placeholder="Add extra grocery item (e.g. Greek yogurt, sourdough bread)..." 
-              required
-            />
-            <input 
-              type="text" 
-              id="input-shop-item-qty" 
-              class="text-input" 
-              style="max-width: 120px;" 
-              placeholder="Qty (e.g. 500g)"
-            />
-            <button type="submit" class="btn-primary-start" style="width: auto; padding: 0 16px;">
-              Add
-            </button>
+            <input type="text" id="input-shop-item-name" class="text-input" placeholder="Add extra grocery item (e.g. Greek yogurt)..." required />
+            <input type="text" id="input-shop-item-qty" class="text-input" style="max-width: 120px;" placeholder="Qty (e.g. 500g)" />
+            <button type="submit" class="btn-primary-start" style="width: auto; padding: 0 16px;">Add</button>
           </div>
         </form>
 
-        <!-- Shopping Items List -->
-        <div class="shopping-items-stack">
-          ${sortedShopping.length > 0 ? `
-            <div class="items-stack">
-              ${sortedShopping.map(item => `
-                <div class="item-card glass-panel ${item.is_checked ? 'is-completed' : ''}" data-shop-id="${item.id}">
-                  <label class="custom-checkbox-wrap">
-                    <input 
-                      type="checkbox" 
-                      class="shop-checkbox" 
-                      data-shop-check-id="${item.id}" 
-                      ${item.is_checked ? 'checked' : ''}
-                    />
-                    <span class="checkbox-box"></span>
-                  </label>
+        ${pending.length ? `<div class="items-stack">${pending.map(row).join('')}</div>` : `
+          <div class="empty-list-state glass-panel text-center">
+            <span class="empty-icon">🛒</span>
+            <h3>${purchased.length ? 'All done — everything is in the pantry' : 'Your shopping list is empty'}</h3>
+            <p style="color: var(--app-text-muted, #666059); font-size: 0.85rem; margin-top: 4px;">Plan your lunches and dinners, then generate the list. Anything already in your Pantry is skipped.</p>
+          </div>`}
 
-                  <div class="item-text-content">
-                    <span class="item-name">${item.ingredient_name}</span>
-                    ${item.quantity ? `<span class="item-note">${item.quantity} ${item.unit || ''}</span>` : ''}
-                  </div>
-
-                  <span class="shop-category-tag">${item.category || 'Groceries'}</span>
-
-                  <button class="btn-item-delete" data-shop-delete-id="${item.id}" title="Remove item">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                  </button>
-                </div>
-              `).join('')}
-            </div>
-          ` : `
-            <div class="empty-list-state glass-panel text-center">
-              <span class="empty-icon">🛒</span>
-              <h3>Your shopping cart is clear</h3>
-              <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
-                Click "Auto-Fill Missing from Plan" above to calculate all missing ingredients across the week's dinners.
-              </p>
-              <button id="btn-auto-calc-shopping-empty" class="btn-primary-start" style="width: auto; padding: 10px 20px; font-size: 0.88rem; margin-top: 14px;">
-                ⚡ Auto-Fill Missing from Plan
-              </button>
-            </div>
-          `}
-        </div>
-      </div>
-    `;
+        ${purchased.length ? `
+          <details class="mp-purchased" open>
+            <summary>
+              <span>✅ Purchased &amp; Added to Pantry (${purchased.length})</span>
+              <button type="button" class="btn-secondary" data-action="clear-purchased" style="padding: 6px 12px; font-size: 0.8rem;">Clear Purchased</button>
+            </summary>
+            <div class="items-stack">${purchased.map(row).join('')}</div>
+          </details>` : ''}
+      </div>`;
   }
 
-  // =========================================================================
-  // 3. PANTRY INVENTORY VIEW
-  // =========================================================================
+  // --- PANTRY ----------------------------------------------------------------
   function renderPantryView() {
-    const inStock = pantryItems.filter(p => p.in_stock);
-    const outOfStock = pantryItems.filter(p => !p.in_stock);
-
+    const items = [...pantryItems].sort((a, b) => (a.ingredient_name || '').localeCompare(b.ingredient_name || ''));
     return `
       <div class="pantry-view">
-        <!-- Quick Add Pantry Form -->
         <form id="form-add-pantry" class="add-item-card glass-panel" style="margin-bottom: 20px;">
           <div class="add-item-row">
-            <input 
-              type="text" 
-              id="input-pantry-name" 
-              class="text-input" 
-              placeholder="Add staple ingredient (e.g. Balsamic vinegar, jasmine rice)..." 
-              required
-            />
-            <input 
-              type="text" 
-              id="input-pantry-qty" 
-              class="text-input" 
-              style="max-width: 130px;" 
-              placeholder="Qty (e.g. 1 bottle)"
-            />
-            <button type="submit" class="btn-primary-start" style="width: auto; padding: 0 16px;">
-              Add to Pantry
-            </button>
+            <input type="text" id="input-pantry-name" class="text-input" placeholder="Something you have at home (e.g. jasmine rice)..." required />
+            <input type="text" id="input-pantry-qty" class="text-input" style="max-width: 130px;" placeholder="Qty (optional)" />
+            <button type="submit" class="btn-primary-start" style="width: auto; padding: 0 16px;">Add to Pantry</button>
           </div>
         </form>
 
-        <div class="pantry-sections-grid">
-          <!-- In Stock Column -->
-          <div class="pantry-column glass-panel">
-            <div class="column-header">
-              <div class="column-title-wrap">
-                <span class="column-status-dot dot-green"></span>
-                <h4>Currently In Stock (${inStock.length})</h4>
-              </div>
-            </div>
-
-            <div class="pantry-list">
-              ${inStock.map(item => `
-                <div class="pantry-item-row">
-                  <div class="pantry-item-info">
-                    <span class="pantry-item-name">${item.ingredient_name}</span>
-                    <span class="pantry-item-meta">${item.quantity || ''} ${item.unit || ''} • ${item.category || 'Pantry'}</span>
-                  </div>
-                  <div class="pantry-item-controls">
-                    <button class="btn-stock-toggle in-stock" data-pantry-id="${item.id}" data-to-stock="false" title="Mark Out of Stock">
-                      In Stock ✓
-                    </button>
-                    <button class="btn-item-delete-sm" data-pantry-delete="${item.id}" title="Remove">✕</button>
-                  </div>
+        <div class="pantry-column glass-panel mp-pantry-card">
+          <div class="column-header"><h4>On hand (${items.length})</h4></div>
+          <p class="mp-pantry-hint">Used something up? Just remove it. Anything here is skipped when generating your shopping list.</p>
+          <div class="pantry-list">
+            ${items.map(item => `
+              <div class="pantry-item-row">
+                <div class="pantry-item-info">
+                  <span class="pantry-item-name">${esc(item.ingredient_name)}</span>
+                  <span class="pantry-item-meta">${esc(amountLabel(item))} ${amountLabel(item) ? '•' : ''} ${esc(item.category || 'Pantry')}</span>
                 </div>
-              `).join('')}
-              ${inStock.length === 0 ? '<p class="empty-col-note">No items currently marked in stock.</p>' : ''}
-            </div>
-          </div>
-
-          <!-- Out of Stock Column -->
-          <div class="pantry-column glass-panel">
-            <div class="column-header">
-              <div class="column-title-wrap">
-                <span class="column-status-dot dot-orange"></span>
-                <h4>Out of Stock / Need (${outOfStock.length})</h4>
-              </div>
-            </div>
-
-            <div class="pantry-list">
-              ${outOfStock.map(item => `
-                <div class="pantry-item-row out-of-stock-row">
-                  <div class="pantry-item-info">
-                    <span class="pantry-item-name">${item.ingredient_name}</span>
-                    <span class="pantry-item-meta">${item.quantity || ''} ${item.unit || ''} • ${item.category || 'Pantry'}</span>
-                  </div>
-                  <div class="pantry-item-controls">
-                    <button class="btn-stock-toggle out-stock" data-pantry-id="${item.id}" data-to-stock="true" title="Mark In Stock">
-                      + Restock
-                    </button>
-                    <button class="btn-item-delete-sm" data-pantry-delete="${item.id}" title="Remove">✕</button>
-                  </div>
-                </div>
-              `).join('')}
-              ${outOfStock.length === 0 ? '<p class="empty-col-note">Great! Nothing currently marked out of stock.</p>' : ''}
-            </div>
+                <button class="btn-item-delete-sm" data-action="delete-pantry" data-id="${item.id}" title="Remove from pantry" aria-label="Remove ${esc(item.ingredient_name)} from pantry">🗑</button>
+              </div>`).join('')}
+            ${items.length === 0 ? '<p class="empty-col-note">Your pantry is empty. Add what you have, or tick off items on the shopping list.</p>' : ''}
           </div>
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
-  // =========================================================================
-  // 4. RECIPES VIEW
-  // =========================================================================
+  // --- RECIPES ---------------------------------------------------------------
   function renderRecipesView() {
     return `
       <div class="recipes-view">
         <div class="recipes-header glass-panel">
           <div>
-            <h3 style="font-family: var(--font-heading);">Favorite Recipes Box</h3>
-            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 2px;">
-              Our curated dinner recipes with tagged categories and structured ingredient measurements.
-            </p>
+            <h3 style="font-family: 'Newsreader', Georgia, serif;">Favorite Recipes Box</h3>
+            <p style="color: var(--app-text-muted, #666059); font-size: 0.85rem; margin-top: 2px;">Lunches and dinners with tagged categories and structured ingredient measurements.</p>
           </div>
-          <button id="btn-add-recipe-modal" class="btn-primary-start" style="width: auto; padding: 8px 16px; font-size: 0.84rem;">
-            ➕ Add New Recipe
-          </button>
+          <button class="btn-primary-start" data-action="open-add-recipe" style="width: auto; padding: 8px 16px; font-size: 0.84rem;">➕ Add New Recipe</button>
         </div>
 
         <div class="recipes-grid">
-          ${recipes.map(recipe => {
-            const ingCount = recipe.recipe_ingredients?.length || 0;
-            return `
-              <div class="recipe-card glass-panel" data-recipe-id="${recipe.id}">
-                <div class="recipe-card-header">
-                  <div class="recipe-title-wrap">
-                    <h4 class="recipe-title">${recipe.title}</h4>
-                    <span class="recipe-prep-pill">⏱️ ${recipe.prep_time_minutes}m</span>
-                  </div>
-                  <button class="btn-recipe-delete" data-recipe-delete="${recipe.id}" title="Delete recipe">✕</button>
+          ${recipes.map(recipe => `
+            <div class="recipe-card glass-panel" data-recipe-id="${recipe.id}">
+              <div class="recipe-card-header">
+                <div class="recipe-title-wrap">
+                  <h4 class="recipe-title">${esc(recipe.title)}</h4>
+                  <span class="recipe-prep-pill">⏱️ ${recipe.prep_time_minutes}m</span>
                 </div>
-
-                <p class="recipe-desc">${recipe.description || 'No description provided.'}</p>
-
-                <div class="recipe-tags-row">
-                  ${(recipe.tags || []).map(t => `<span class="recipe-tag-pill">${t}</span>`).join('')}
-                </div>
-
-                <div class="recipe-ingredients-summary">
-                  <h5>Ingredients (${ingCount}):</h5>
-                  <div class="recipe-ing-tags">
-                    ${(recipe.recipe_ingredients || []).map(ing => `
-                      <span class="recipe-ing-item">
-                        ${ing.quantity ? `${ing.quantity} ${ing.unit || ''}` : ''} ${ing.ingredient_name}
-                      </span>
-                    `).join('')}
-                  </div>
-                </div>
-
-                ${recipe.instructions ? `
-                  <details class="recipe-instructions-details">
-                    <summary>View Instructions</summary>
-                    <p class="recipe-instructions-text">${recipe.instructions.replace(/\n/g, '<br/>')}</p>
-                  </details>
-                ` : ''}
+                <button class="btn-recipe-delete" data-action="delete-recipe" data-id="${recipe.id}" title="Delete recipe" aria-label="Delete recipe">✕</button>
               </div>
-            `;
-          }).join('')}
+              <p class="recipe-desc">${esc(recipe.description || 'No description provided.')}</p>
+              <div class="recipe-tags-row">${(recipe.tags || []).map(t => `<span class="recipe-tag-pill">${esc(t)}</span>`).join('')}</div>
+              <div class="recipe-ingredients-summary">
+                <h5>Ingredients (${recipe.recipe_ingredients?.length || 0}):</h5>
+                <div class="recipe-ing-tags">
+                  ${(recipe.recipe_ingredients || []).map(ing => `<span class="recipe-ing-item">${ing.quantity ? `${formatQty(Number(ing.quantity))} ${esc(ing.unit || '')}` : ''} ${esc(ing.ingredient_name)}</span>`).join('')}
+                </div>
+              </div>
+              ${recipe.instructions ? `
+                <details class="recipe-instructions-details">
+                  <summary>View Instructions</summary>
+                  <p class="recipe-instructions-text">${esc(recipe.instructions).replace(/\n/g, '<br/>')}</p>
+                </details>` : ''}
+            </div>`).join('')}
         </div>
-
-        <!-- Add Recipe Modal -->
-        <div id="modal-add-recipe" class="modal-backdrop" style="display: none;">
-          <div class="modal-dialog glass-panel" style="max-width: 580px;">
-            <div class="modal-header">
-              <h3>Create New Recipe</h3>
-              <button id="btn-close-recipe-modal" class="modal-close">&times;</button>
-            </div>
-            <form id="form-create-recipe" class="modal-body">
-              <div class="form-group">
-                <label>Recipe Title</label>
-                <input type="text" id="recipe-in-title" class="text-input" placeholder="e.g. Creamy Tuscan Garlic Gnocchi" required />
-              </div>
-
-              <div class="form-row-2" style="display: flex; gap: 12px; margin-top: 12px;">
-                <div class="form-group" style="flex: 1;">
-                  <label>Prep Time (min)</label>
-                  <input type="number" id="recipe-in-time" class="text-input" value="25" min="5" max="180" />
-                </div>
-                <div class="form-group" style="flex: 2;">
-                  <label>Tags (comma separated)</label>
-                  <input type="text" id="recipe-in-tags" class="text-input" placeholder="quick, pasta, vegetarian" />
-                </div>
-              </div>
-
-              <div class="form-group" style="margin-top: 12px;">
-                <label>Description</label>
-                <input type="text" id="recipe-in-desc" class="text-input" placeholder="Short description of the dish" />
-              </div>
-
-              <div class="form-group" style="margin-top: 12px;">
-                <label>Ingredients (one per line, e.g. "250g spaghetti", "2 tbsp olive oil")</label>
-                <textarea id="recipe-in-ingredients" class="text-input" rows="4" placeholder="250g spaghetti&#10;4 cloves garlic&#10;2 tbsp olive oil" required></textarea>
-              </div>
-
-              <div class="form-group" style="margin-top: 12px;">
-                <label>Cooking Instructions</label>
-                <textarea id="recipe-in-instructions" class="text-input" rows="4" placeholder="Step-by-step instructions..."></textarea>
-              </div>
-
-              <button type="submit" class="btn-primary-start" style="margin-top: 18px;">
-                Save Recipe
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    `;
+      </div>`;
   }
 
-  // =========================================================================
-  // EVENT LISTENERS & LOGIC
-  // =========================================================================
+  function renderAddRecipeModal() {
+    return `
+      <div class="mp-sheet-backdrop" data-action="close-sheet">
+        <div class="mp-sheet" role="dialog" aria-label="Create recipe">
+          <div class="mp-sheet-grab"></div>
+          <div class="mp-sheet-head">
+            <div><span class="mp-sheet-kicker">Recipe box</span><h3>Create New Recipe</h3></div>
+            <button class="mp-sheet-close" data-action="close-sheet" aria-label="Close">&times;</button>
+          </div>
+          <form id="form-create-recipe" class="mp-sheet-body">
+            <div class="form-group"><label>Recipe Title</label>
+              <input type="text" id="recipe-in-title" class="text-input" placeholder="e.g. Creamy Tuscan Garlic Gnocchi" required /></div>
+            <div style="display: flex; gap: 12px; margin-top: 12px;">
+              <div class="form-group" style="flex: 1;"><label>Prep (min)</label>
+                <input type="number" id="recipe-in-time" class="text-input" value="25" min="5" max="180" /></div>
+              <div class="form-group" style="flex: 2;"><label>Tags (comma separated)</label>
+                <input type="text" id="recipe-in-tags" class="text-input" placeholder="quick, sandwich, vegetarian" /></div>
+            </div>
+            <div class="form-group" style="margin-top: 12px;"><label>Description</label>
+              <input type="text" id="recipe-in-desc" class="text-input" placeholder="Short description of the dish" /></div>
+            <div class="form-group" style="margin-top: 12px;"><label>Ingredients (one per line, e.g. "250 g spaghetti")</label>
+              <textarea id="recipe-in-ingredients" class="text-input" rows="4" placeholder="250 g spaghetti&#10;4 cloves garlic&#10;2 tbsp olive oil" required></textarea></div>
+            <div class="form-group" style="margin-top: 12px;"><label>Cooking Instructions</label>
+              <textarea id="recipe-in-instructions" class="text-input" rows="4" placeholder="One step per line..."></textarea></div>
+            <button type="submit" class="mp-primary-btn" style="margin-top: 18px; width: 100%;">Save Recipe</button>
+          </form>
+        </div>
+      </div>`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Toast + mobile day observer
+  // ---------------------------------------------------------------------------
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'mp-toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2800);
+  }
+
+  function setupDayObserver() {
+    if (!('IntersectionObserver' in window)) return;
+    const days = container.querySelectorAll('.mp-day');
+    dayObserver = new IntersectionObserver((entries) => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        focusedDay = parseInt(en.target.getAttribute('data-day'), 10);
+        container.querySelectorAll('.mp-pill').forEach(p => {
+          p.classList.toggle('active', parseInt(p.getAttribute('data-day'), 10) === focusedDay);
+        });
+      });
+    }, { rootMargin: '-25% 0px -60% 0px' });
+    days.forEach(d => dayObserver.observe(d));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Events (delegated on the freshly-rendered shell each time)
+  // ---------------------------------------------------------------------------
   function attachEvents() {
-    // Subnav Tab Switching
-    container.querySelectorAll('.subnav-tab').forEach(tab => {
+    const shell = container.querySelector('.meals-view-shell');
+    if (!shell) return;
+
+    shell.querySelectorAll('.subnav-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         activeTab = tab.getAttribute('data-tab');
+        sheet = null;
         render();
       });
     });
 
-    // 1. Planner Events
-    if (activeTab === 'planner') {
-      // Auto-generate weekly plan
-      container.querySelector('#btn-generate-plan')?.addEventListener('click', async () => {
-        const btn = container.querySelector('#btn-generate-plan');
-        if (btn) btn.textContent = 'Generating...';
+    shell.addEventListener('click', async (e) => {
+      const el = e.target.closest('[data-action]');
+      if (!el || !shell.contains(el)) return;
+      const action = el.getAttribute('data-action');
+      const d = parseInt(el.getAttribute('data-day'), 10);
+      const slot = el.getAttribute('data-slot');
 
-        await generateWeeklyPlanInternal();
-        render();
-      });
+      // Backdrop click should only close when clicking the backdrop itself
+      if (action === 'close-sheet' && el.classList.contains('mp-sheet-backdrop') && e.target !== el) return;
 
-      // Export missing plan ingredients to Shopping List
-      container.querySelector('#btn-sync-to-shopping')?.addEventListener('click', async () => {
-        await autoGenerateShoppingList();
-        activeTab = 'shopping';
-        render();
-      });
-
-      // Day Tag Selector
-      container.querySelectorAll('.select-day-tag').forEach(sel => {
-        sel.addEventListener('change', (e) => {
-          const dIdx = parseInt(sel.getAttribute('data-day-index'), 10);
-          requestedTags[dIdx] = e.target.value;
-        });
-      });
-
-      // Recipe Swap Dropdown
-      container.querySelectorAll('.select-swap-recipe').forEach(sel => {
-        sel.addEventListener('change', async (e) => {
-          const dIdx = parseInt(sel.getAttribute('data-day-index'), 10);
-          const chosenRecipeId = e.target.value;
-          const chosenRecipe = recipes.find(r => r.id === chosenRecipeId);
-          if (!chosenRecipe) return;
-
-          let targetDay = planDays.find(p => p.day_of_week === dIdx);
-          if (targetDay) {
-            targetDay.recipe_id = chosenRecipeId;
-            targetDay.recipes = chosenRecipe;
-          } else {
-            targetDay = {
-              id: generateUUID(),
-              meal_plan_id: activePlan?.id || null,
-              day_of_week: dIdx,
-              recipe_id: chosenRecipeId,
-              recipes: chosenRecipe,
-              requested_tag: requestedTags[dIdx] || 'quick',
-              is_cooked: false
-            };
-            planDays.push(targetDay);
-          }
-
-          if (isSupabaseConfigured && activePlan?.id) {
-            await supabase
-              .from('meal_plan_days')
-              .upsert({
-                id: targetDay.id && !targetDay.id.startsWith('plan-day-') ? targetDay.id : generateUUID(),
-                meal_plan_id: activePlan.id,
-                day_of_week: dIdx,
-                recipe_id: chosenRecipeId
-              }, { onConflict: 'meal_plan_id,day_of_week' });
-          } else {
-            localStorage.setItem(STORAGE_PLAN_DAYS_KEY, JSON.stringify(planDays));
-          }
-
-          render();
-        });
-      });
-
-      // Mark as Cooked Button
-      container.querySelectorAll('.btn-mark-cooked').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const dIdx = parseInt(btn.getAttribute('data-day-index'), 10);
-          const targetDay = planDays.find(p => p.day_of_week === dIdx);
-          if (!targetDay) return;
-
-          const nextCookedState = !targetDay.is_cooked;
-          targetDay.is_cooked = nextCookedState;
-
-          if (isSupabaseConfigured && activePlan?.id) {
-            await supabase
-              .from('meal_plan_days')
-              .update({ is_cooked: nextCookedState, cooked_at: nextCookedState ? new Date().toISOString() : null })
-              .eq('meal_plan_id', activePlan.id)
-              .eq('day_of_week', dIdx);
-          } else {
-            localStorage.setItem(STORAGE_PLAN_DAYS_KEY, JSON.stringify(planDays));
-          }
-
-          render();
-        });
-      });
-    }
-
-    // 2. Shopping List Events
-    if (activeTab === 'shopping') {
-      // Auto-calc missing ingredients from weekly plan
-      const handleAutoCalc = async () => {
-        const btn = container.querySelector('#btn-auto-calc-shopping');
-        const emptyBtn = container.querySelector('#btn-auto-calc-shopping-empty');
-        if (btn) btn.textContent = 'Calculating...';
-        if (emptyBtn) emptyBtn.textContent = 'Calculating...';
-        await autoGenerateShoppingList();
-      };
-
-      container.querySelector('#btn-auto-calc-shopping')?.addEventListener('click', handleAutoCalc);
-      container.querySelector('#btn-auto-calc-shopping-empty')?.addEventListener('click', handleAutoCalc);
-
-      // Clear checked items
-      container.querySelector('#btn-clear-checked-shopping')?.addEventListener('click', async () => {
-        const toDeleteIds = shoppingItems.filter(s => s.is_checked).map(s => s.id);
-        shoppingItems = shoppingItems.filter(s => !s.is_checked);
-
-        if (isSupabaseConfigured && toDeleteIds.length > 0) {
-          await supabase.from('meal_shopping_items').delete().in('id', toDeleteIds);
-        } else {
-          localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
+      switch (action) {
+        case 'jump-day': {
+          focusedDay = d;
+          shell.querySelectorAll('.mp-pill').forEach(p => p.classList.toggle('active', parseInt(p.getAttribute('data-day'), 10) === d));
+          shell.querySelector(`#mp-day-${d}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          break;
         }
-
-        render();
-      });
-
-      // Add manual grocery item
-      const addShopForm = container.querySelector('#form-add-shopping-item');
-      addShopForm?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const nameInput = container.querySelector('#input-shop-item-name');
-        const qtyInput = container.querySelector('#input-shop-item-qty');
-        const name = nameInput?.value?.trim();
-        const qty = qtyInput?.value?.trim() || '';
-
-        if (!name) return;
-
-        const newItem = {
-          id: generateUUID(),
-          household_id: household.id,
-          ingredient_name: name,
-          normalized_name: name.toLowerCase().trim(),
-          quantity: 1,
-          unit: qty,
-          category: 'Groceries',
-          is_checked: false
-        };
-
-        if (isSupabaseConfigured) {
-          const { data } = await supabase.from('meal_shopping_items').insert([newItem]).select().single();
-          if (data) shoppingItems.unshift(data);
-        } else {
-          shoppingItems.unshift(newItem);
-          localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
+        case 'open-sheet':
+          sheet = { type: 'recipe', day: d, slot };
+          scrollSafeRender();
+          break;
+        case 'open-picker':
+          sheet = { type: 'picker', day: d, slot };
+          scrollSafeRender();
+          break;
+        case 'close-sheet':
+          sheet = null;
+          showAddRecipe = false;
+          scrollSafeRender();
+          break;
+        case 'choose-recipe': {
+          const id = el.getAttribute('data-recipe-id');
+          const { day, slot: s } = sheet;
+          sheet = null;
+          await setRecipe(day, s, id || null);
+          scrollSafeRender();
+          break;
         }
-
-        render();
-      });
-
-      // Shopping Checkbox Toggle -> CRITICAL TRIGGER & IMMEDIATE PANTRY SYNC
-      container.querySelectorAll('.shop-checkbox').forEach(chk => {
-        chk.addEventListener('change', async (e) => {
-          const id = chk.getAttribute('data-shop-check-id');
-          const isChecked = e.target.checked;
-          const target = shoppingItems.find(s => s.id === id);
-          if (target) {
-            target.is_checked = isChecked;
-          }
-
-          const norm = (target?.normalized_name || target?.ingredient_name || '').toLowerCase().trim();
-
-          // Reflect immediately into pantry in local state
-          const existingPantry = pantryItems.find(p => p.normalized_name === norm);
-          if (existingPantry) {
-            existingPantry.in_stock = isChecked;
-          } else if (isChecked && target) {
-            pantryItems.push({
-              id: `pantry-sync-${Date.now()}`,
-              household_id: household.id,
-              ingredient_name: target.ingredient_name,
-              normalized_name: norm,
-              quantity: target.quantity || 1,
-              unit: target.unit || '',
-              in_stock: true,
-              category: target.category || 'Pantry'
-            });
-          }
-
-          // Supabase sync (executes the Postgres trigger handle_shopping_item_pantry_sync)
-          if (isSupabaseConfigured) {
-            await supabase
-              .from('meal_shopping_items')
-              .update({ is_checked: isChecked, updated_at: new Date().toISOString() })
-              .eq('id', id);
-          } else {
-            localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
-            localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
-          }
-
+        case 'suggest': {
+          const pick = suggestRecipe(el.getAttribute('data-tag'), usedRecipeIds());
+          if (!pick) { toast('Add some recipes first.'); break; }
+          await setRecipe(d, slot, pick.id);
+          scrollSafeRender();
+          break;
+        }
+        case 'set-prep':
+          await setMealPrep(d, el.getAttribute('data-prep') === '1');
+          scrollSafeRender();
+          break;
+        case 'toggle-cooked':
+          await toggleCooked(sheet.day, sheet.slot);
+          scrollSafeRender();
+          break;
+        case 'autofill':
+          el.textContent = 'Filling...';
+          await autoFillEmptySlots();
+          scrollSafeRender();
+          break;
+        case 'generate-shopping': {
+          const added = await generateShoppingList();
+          if (added === false) break;
+          activeTab = 'shopping';
           render();
-        });
-      });
-
-      // Delete shopping item
-      container.querySelectorAll('.btn-item-delete').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = btn.getAttribute('data-shop-delete-id');
+          window.scrollTo({ top: 0 });
+          toast(added ? `🛒 ${added} item${added > 1 ? 's' : ''} to buy — pantry staples skipped` : 'You already have everything in your pantry! 🎉');
+          break;
+        }
+        case 'delete-shop': {
+          const id = el.getAttribute('data-id');
           shoppingItems = shoppingItems.filter(s => s.id !== id);
-
-          if (isSupabaseConfigured) {
-            await supabase.from('meal_shopping_items').delete().eq('id', id);
-          } else {
-            localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
-          }
-
-          render();
-        });
-      });
-    }
-
-    // 3. Pantry Events
-    if (activeTab === 'pantry') {
-      // Add Pantry Staple
-      const pantryForm = container.querySelector('#form-add-pantry');
-      pantryForm?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const nameInput = container.querySelector('#input-pantry-name');
-        const qtyInput = container.querySelector('#input-pantry-qty');
-        const name = nameInput?.value?.trim();
-        const qty = qtyInput?.value?.trim() || '';
-
-        if (!name) return;
-        const norm = name.toLowerCase().trim();
-
-        const newItem = {
-          id: generateUUID(),
-          household_id: household.id,
-          ingredient_name: name,
-          normalized_name: norm,
-          quantity: 1,
-          unit: qty,
-          in_stock: true,
-          category: 'Pantry'
-        };
-
-        if (isSupabaseConfigured) {
-          const { data } = await supabase.from('pantry_items').insert([newItem]).select().single();
-          if (data) pantryItems.unshift(data);
-        } else {
-          pantryItems.unshift(newItem);
-          localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
+          if (useDbBasic()) await supabase.from('meal_shopping_items').delete().eq('id', id);
+          else localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
+          scrollSafeRender();
+          break;
         }
-
-        render();
-      });
-
-      // Stock Toggle
-      container.querySelectorAll('.btn-stock-toggle').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.getAttribute('data-pantry-id');
-          const toStock = btn.getAttribute('data-to-stock') === 'true';
-          const target = pantryItems.find(p => p.id === id);
-          if (target) {
-            target.in_stock = toStock;
-          }
-
-          if (isSupabaseConfigured) {
-            await supabase.from('pantry_items').update({ in_stock: toStock, updated_at: new Date().toISOString() }).eq('id', id);
-          } else {
-            localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
-          }
-
-          render();
-        });
-      });
-
-      // Delete Pantry Item
-      container.querySelectorAll('.btn-item-delete-sm').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.getAttribute('data-pantry-delete');
+        case 'clear-purchased': {
+          e.preventDefault();
+          const ids = shoppingItems.filter(s => s.is_checked).map(s => s.id);
+          shoppingItems = shoppingItems.filter(s => !s.is_checked);
+          if (useDbBasic() && ids.length) await supabase.from('meal_shopping_items').delete().in('id', ids);
+          else localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
+          scrollSafeRender();
+          break;
+        }
+        case 'delete-pantry': {
+          const id = el.getAttribute('data-id');
           pantryItems = pantryItems.filter(p => p.id !== id);
-
-          if (isSupabaseConfigured) {
-            await supabase.from('pantry_items').delete().eq('id', id);
-          } else {
-            localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
-          }
-
-          render();
-        });
-      });
-    }
-
-    // 4. Recipes Events
-    if (activeTab === 'recipes') {
-      const modalAdd = container.querySelector('#modal-add-recipe');
-      const btnOpenAdd = container.querySelector('#btn-add-recipe-modal');
-      const btnCloseAdd = container.querySelector('#btn-close-recipe-modal');
-
-      btnOpenAdd?.addEventListener('click', () => {
-        if (modalAdd) modalAdd.style.display = 'flex';
-      });
-
-      btnCloseAdd?.addEventListener('click', () => {
-        if (modalAdd) modalAdd.style.display = 'none';
-      });
-
-      modalAdd?.addEventListener('click', (e) => {
-        if (e.target === modalAdd) modalAdd.style.display = 'none';
-      });
-
-      // Form Create Recipe
-      const formRecipe = container.querySelector('#form-create-recipe');
-      formRecipe?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const title = container.querySelector('#recipe-in-title')?.value?.trim();
-        const time = parseInt(container.querySelector('#recipe-in-time')?.value || '25', 10);
-        const tagsRaw = container.querySelector('#recipe-in-tags')?.value || '';
-        const desc = container.querySelector('#recipe-in-desc')?.value?.trim() || '';
-        const ingsRaw = container.querySelector('#recipe-in-ingredients')?.value || '';
-        const instructions = container.querySelector('#recipe-in-instructions')?.value?.trim() || '';
-
-        if (!title) return;
-
-        const tags = tagsRaw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-        const parsedIngs = ingsRaw.split('\n').map(line => line.trim()).filter(Boolean).map(line => ({
-          ingredient_name: line,
-          normalized_name: line.toLowerCase().trim(),
-          quantity: 1,
-          unit: '',
-          category: 'Other'
-        }));
-
-        const recipeId = generateUUID();
-        const newRecipe = {
-          id: recipeId,
-          household_id: household.id,
-          title,
-          description: desc,
-          instructions,
-          prep_time_minutes: time,
-          tags,
-          recipe_ingredients: parsedIngs
-        };
-
-        if (isSupabaseConfigured) {
-          const { data: created, error } = await supabase
-            .from('recipes')
-            .insert([{
-              id: recipeId,
-              household_id: household.id,
-              title,
-              description: desc,
-              instructions,
-              prep_time_minutes: time,
-              tags
-            }])
-            .select()
-            .single();
-
-          if (!error && created) {
-            if (parsedIngs.length > 0) {
-              const ingPayload = parsedIngs.map(i => ({
-                id: generateUUID(),
-                ...i,
-                recipe_id: created.id
-              }));
-              await supabase.from('recipe_ingredients').insert(ingPayload);
-              created.recipe_ingredients = ingPayload;
-            }
-            recipes.unshift(created);
-          }
-        } else {
-          recipes.unshift(newRecipe);
-          localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(recipes));
+          if (useDbBasic()) await supabase.from('pantry_items').delete().eq('id', id);
+          else localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
+          scrollSafeRender();
+          break;
         }
-
-        if (modalAdd) modalAdd.style.display = 'none';
-        render();
-      });
-
-      // Delete Recipe
-      container.querySelectorAll('.btn-recipe-delete').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = btn.getAttribute('data-recipe-delete');
+        case 'open-add-recipe':
+          showAddRecipe = true;
+          scrollSafeRender();
+          break;
+        case 'delete-recipe': {
+          const id = el.getAttribute('data-id');
           if (!confirm('Delete this recipe?')) return;
+          await deleteRecipe(id);
+          scrollSafeRender();
+          break;
+        }
+      }
+    });
 
-          recipes = recipes.filter(r => r.id !== id);
+    // Shopping checkbox -> straight into the pantry
+    shell.addEventListener('change', async (e) => {
+      const chk = e.target.closest('.shop-checkbox');
+      if (!chk) return;
+      await toggleShoppingItem(chk.getAttribute('data-shop-check-id'), chk.checked);
+      scrollSafeRender();
+    });
 
-          if (isSupabaseConfigured) {
-            await supabase.from('recipes').delete().eq('id', id);
-          } else {
-            localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(recipes));
-          }
+    shell.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      if (form.id === 'form-add-shopping-item') await addShoppingItem();
+      else if (form.id === 'form-add-pantry') await addPantryItem();
+      else if (form.id === 'form-create-recipe') await createRecipe();
+    });
+  }
 
-          render();
+  async function toggleShoppingItem(id, isChecked) {
+    const target = shoppingItems.find(s => s.id === id);
+    if (!target) return;
+    target.is_checked = isChecked;
+    const norm = normName(target.normalized_name || target.ingredient_name);
+
+    if (isChecked) {
+      if (!isInPantry(norm)) {
+        pantryItems.push({
+          id: generateUUID(),
+          household_id: household?.id,
+          ingredient_name: target.ingredient_name,
+          normalized_name: norm,
+          quantity: target.quantity || 1,
+          unit: target.unit || '',
+          category: target.category || 'Pantry'
         });
-      });
-    }
-  }
-
-  // Helper to generate and persist weekly meal assignments
-  async function generateWeeklyPlanInternal() {
-    if (recipes.length === 0) return [];
-
-    const newPlanDays = DAYS_OF_WEEK.map(d => {
-      const reqTag = requestedTags[d.index] || 'quick';
-      const sorted = [...recipes].sort((a, b) => {
-        const scoreB = scoreRecipeForPantry(b, reqTag).score;
-        const scoreA = scoreRecipeForPantry(a, reqTag).score;
-        return scoreB - scoreA;
-      });
-
-      const bestRecipe = sorted[d.index % sorted.length] || sorted[0];
-
-      return {
-        id: generateUUID(),
-        meal_plan_id: activePlan?.id || null,
-        day_of_week: d.index,
-        recipe_id: bestRecipe.id,
-        recipes: bestRecipe,
-        requested_tag: reqTag,
-        is_cooked: false
-      };
-    });
-
-    planDays = newPlanDays;
-
-    if (isSupabaseConfigured && activePlan?.id) {
-      try {
-        await supabase.from('meal_plan_days').delete().eq('meal_plan_id', activePlan.id);
-        const { error: insErr } = await supabase.from('meal_plan_days').insert(
-          newPlanDays.map(p => ({
-            id: p.id,
-            meal_plan_id: activePlan.id,
-            day_of_week: p.day_of_week,
-            recipe_id: p.recipe_id,
-            requested_tag: p.requested_tag,
-            is_cooked: false
-          }))
-        );
-        if (insErr) {
-          console.warn('Error saving plan days to Supabase:', insErr);
-        }
-      } catch (e) {
-        console.warn('Error saving plan to Supabase:', e);
       }
     } else {
-      localStorage.setItem(STORAGE_PLAN_DAYS_KEY, JSON.stringify(planDays));
+      pantryItems = pantryItems.filter(p => normName(p.normalized_name || p.ingredient_name) !== norm);
     }
 
-    return newPlanDays;
+    if (useDbBasic()) {
+      // DB trigger upserts/deletes the pantry row; refetch for real ids
+      await supabase.from('meal_shopping_items').update({ is_checked: isChecked, updated_at: new Date().toISOString() }).eq('id', id);
+      await reloadPantry();
+    } else {
+      localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
+      localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
+    }
   }
 
-  // Auto-generation logic for Shopping List
-  async function autoGenerateShoppingList(forceAllPlanIngredients = false) {
-    const needed = new Map();
-
-    // 1. Ensure weekly dinners are assigned
-    const hasActivePlannedDays = planDays.some(day => day.recipe_id || day.recipes);
-    if (!hasActivePlannedDays) {
-      await generateWeeklyPlanInternal();
-    }
-
-    const activePlannedDays = planDays.filter(day => day.recipe_id || day.recipes);
-    if (activePlannedDays.length === 0) {
-      alert('No recipes available to plan. Please add recipes to your Recipe Library first.');
-      return;
-    }
-
-    // 2. Collect all required ingredients from active weekly plan
-    activePlannedDays.forEach(day => {
-      const rec = day.recipes || recipes.find(r => r.id === day.recipe_id);
-      if (!rec) return;
-
-      const ings = rec.recipe_ingredients || [];
-      ings.forEach(ing => {
-        const norm = (ing.normalized_name || ing.ingredient_name || '').toLowerCase().trim();
-        if (!norm) return;
-
-        // Check if ingredient is already in stock in pantry (bypassed if forceAllPlanIngredients)
-        const hasInPantry = !forceAllPlanIngredients && pantryItems.some(p => (p.normalized_name || p.ingredient_name || '').toLowerCase().trim() === norm && p.in_stock);
-        
-        // Check if already on current shopping list (and not checked off)
-        const alreadyInShopping = shoppingItems.some(s => (s.normalized_name || s.ingredient_name || '').toLowerCase().trim() === norm && !s.is_checked);
-
-        if (!hasInPantry && !alreadyInShopping) {
-          if (!needed.has(norm)) {
-            needed.set(norm, {
-              ingredient_name: ing.ingredient_name,
-              normalized_name: norm,
-              quantity: typeof ing.quantity === 'number' ? ing.quantity : 1,
-              unit: ing.unit || '',
-              category: ing.category || 'Groceries'
-            });
-          }
-        }
-      });
-    });
-
-    if (needed.size === 0) {
-      const addAnyway = confirm('All ingredients for this week are currently marked "In Stock" in your pantry.\n\nWould you like to add all fresh ingredients from this week\'s planned meals to your shopping cart anyway?');
-      if (addAnyway) {
-        return await autoGenerateShoppingList(true);
-      }
-      return;
-    }
-
-    const newShoppingItems = Array.from(needed.values()).map(n => ({
+  async function addShoppingItem() {
+    const name = container.querySelector('#input-shop-item-name')?.value?.trim();
+    const amount = parseAmount(container.querySelector('#input-shop-item-qty')?.value);
+    if (!name) return;
+    const item = {
       id: generateUUID(),
-      household_id: household.id,
-      meal_plan_id: activePlan?.id || null,
-      ingredient_name: n.ingredient_name,
-      normalized_name: n.normalized_name,
-      quantity: typeof n.quantity === 'number' ? n.quantity : 1,
-      unit: n.unit || '',
-      category: n.category || 'Groceries',
+      household_id: household?.id,
+      ingredient_name: name,
+      normalized_name: normName(name),
+      quantity: amount.quantity,
+      unit: amount.unit,
+      category: 'Groceries',
       is_checked: false
-    }));
-
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('meal_shopping_items').insert(newShoppingItems).select();
-      if (error) {
-        console.error('Error inserting auto-filled shopping items:', error);
-        alert(`Failed to add items to shopping list: ${error.message}`);
-        return;
-      }
-      if (data) {
-        shoppingItems = [...data, ...shoppingItems];
-      }
+    };
+    if (useDbBasic()) {
+      const { data } = await supabase.from('meal_shopping_items').insert([item]).select().single();
+      if (data) shoppingItems.unshift(data);
     } else {
-      shoppingItems = [...newShoppingItems, ...shoppingItems];
+      shoppingItems.unshift(item);
       localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
     }
+    scrollSafeRender();
+  }
 
-    render();
-    alert(`🛒 Added ${newShoppingItems.length} missing ingredient${newShoppingItems.length > 1 ? 's' : ''} to your shopping cart!`);
+  async function addPantryItem() {
+    const name = container.querySelector('#input-pantry-name')?.value?.trim();
+    const amount = parseAmount(container.querySelector('#input-pantry-qty')?.value);
+    if (!name) return;
+    const norm = normName(name);
+    const item = {
+      id: generateUUID(),
+      household_id: household?.id,
+      ingredient_name: name,
+      normalized_name: norm,
+      quantity: amount.quantity,
+      unit: amount.unit,
+      category: 'Pantry'
+    };
+    if (useDbBasic()) {
+      const { error } = await supabase.from('pantry_items').upsert([item], { onConflict: 'household_id,normalized_name' });
+      if (error) { toast(`Could not add: ${error.message}`); return; }
+      await reloadPantry();
+    } else {
+      pantryItems = [item, ...pantryItems.filter(p => normName(p.normalized_name) !== norm)];
+      localStorage.setItem(STORAGE_PANTRY_KEY, JSON.stringify(pantryItems));
+    }
+    scrollSafeRender();
+  }
+
+  function parseIngredientLine(line) {
+    const m = line.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|tbsp|tsp|cups?|cloves?|cans?|whole|pinch|handful|slices?)?\s+(?:of\s+)?(.+)$/i);
+    const name = (m ? m[3] : line).trim();
+    return {
+      ingredient_name: name,
+      normalized_name: normName(name),
+      quantity: m ? parseFloat(m[1].replace(',', '.')) : 1,
+      unit: m ? (m[2] || '') : '',
+      category: 'Other'
+    };
+  }
+
+  async function createRecipe() {
+    const q = (id) => container.querySelector(id)?.value?.trim() || '';
+    const title = q('#recipe-in-title');
+    if (!title) return;
+    const time = parseInt(q('#recipe-in-time') || '25', 10);
+    const tags = q('#recipe-in-tags').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    const parsedIngs = (container.querySelector('#recipe-in-ingredients')?.value || '')
+      .split('\n').map(l => l.trim()).filter(Boolean).map(parseIngredientLine);
+
+    const base = { id: generateUUID(), title, description: q('#recipe-in-desc'), instructions: container.querySelector('#recipe-in-instructions')?.value?.trim() || '', prep_time_minutes: time, tags };
+
+    if (useDbBasic()) {
+      const { data: created, error } = await supabase.from('recipes').insert([{ ...base, household_id: household.id }]).select().single();
+      if (!error && created) {
+        if (parsedIngs.length) {
+          const ingPayload = parsedIngs.map(i => ({ id: generateUUID(), ...i, recipe_id: created.id }));
+          await supabase.from('recipe_ingredients').insert(ingPayload);
+          created.recipe_ingredients = ingPayload;
+        }
+        recipes.unshift(created);
+      }
+    } else {
+      recipes.unshift({ ...base, household_id: household?.id, recipe_ingredients: parsedIngs });
+      localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(recipes));
+    }
+    showAddRecipe = false;
+    scrollSafeRender();
+  }
+
+  async function deleteRecipe(id) {
+    recipes = recipes.filter(r => r.id !== id);
+    const affected = planDays.filter(p => p.recipe_id === id);
+    const affectedIds = new Set(affected.map(p => p.id));
+    const linked = planDays.filter(p => p.source_meal_prep_id && affectedIds.has(p.source_meal_prep_id));
+    const changes = newChanges();
+    [...affected, ...linked].forEach(p => { if (planDays.includes(p)) removeEntry(p, changes); });
+
+    if (useDbBasic()) {
+      await supabase.from('recipes').delete().eq('id', id);
+      if (changes.remove.length && useDb()) await persist(changes);
+    } else {
+      localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(recipes));
+      await persist(changes);
+    }
   }
 
   await loadAllData();
   render();
 }
-
