@@ -78,9 +78,9 @@ export async function mountDashboard(container, navigate) {
       id: 'q-demo',
       quote_text: "If we eat the cookies standing up by the pantry, the calories don't count.",
       author_speaker: 'Núria 💗',
-      context_or_location: 'Pinned to the fridge',
+      context_or_location: 'Pinned to the board',
       style_variant: 'sticky-yellow',
-      magnet_icon: '🧲'
+      magnet_icon: '📌'
     };
   }
 
@@ -162,18 +162,18 @@ export async function mountDashboard(container, navigate) {
           </div>
         </div>
 
-        <!-- 4. Fridge & Mirror Quotes -->
+        <!-- 4. Note Board -->
         <div class="app-launch-card card-quotes glass-panel" data-nav="/quotes">
-          <div class="card-badge">Fridge & Mirror</div>
+          <div class="card-badge">Pinned Notes</div>
           <div class="card-icon-wrap icon-quotes">
-            <span>🧲</span>
+            <span>📌</span>
           </div>
           <div class="card-body">
-            <h2 class="card-title">Quotes & Notes</h2>
-            <p class="card-desc">Funny phrases, sweet mirror notes, and fridge magnets we leave for each other.</p>
+            <h2 class="card-title">Note Board</h2>
+            <p class="card-desc">Funny phrases, sweet reminders, and things we say to each other.</p>
           </div>
           <div class="card-footer">
-            <span class="card-action-label">Open Quotes Board</span>
+            <span class="card-action-label">Open Note Board</span>
             <span class="card-arrow">→</span>
           </div>
         </div>
@@ -244,24 +244,26 @@ export async function mountDashboard(container, navigate) {
           </div>
         </div>
 
-        <!-- Quotes Preview Widget -->
+        <!-- Note Board Widget -->
         <div class="dash-widget glass-panel">
           <div class="widget-header">
             <div class="widget-title-wrap">
-              <span class="widget-icon">🧲</span>
-              <h3 class="widget-title">Fridge & Mirror Pin</h3>
+              <span class="widget-icon">📌</span>
+              <h3 class="widget-title">Pinned Note</h3>
             </div>
-            <a href="/quotes" class="widget-link" data-nav="/quotes">Pinboard →</a>
+            <a href="/quotes" class="widget-link" data-nav="/quotes">Note Board →</a>
           </div>
 
           <div class="widget-body">
             ${latestQuote ? `
               <div class="dash-quote-preview ${latestQuote.style_variant || 'sticky-yellow'}">
-                <span class="dash-quote-magnet">${latestQuote.magnet_icon || '🧲'}</span>
+                <span class="dash-quote-magnet">${latestQuote.magnet_icon || '📌'}</span>
                 <p class="dash-quote-text">“${latestQuote.quote_text}”</p>
                 <div class="dash-quote-meta">
                   <span class="dash-quote-author">— ${
-                    (latestQuote.author_speaker || '').toLowerCase().includes('núria') || (latestQuote.author_speaker || '').toLowerCase().includes('nuria')
+                    (latestQuote.author_speaker || '').toLowerCase().includes('both') || ((latestQuote.author_speaker || '').toLowerCase().includes('andino') && (latestQuote.author_speaker || '').toLowerCase().includes('nuria'))
+                      ? 'Both 👫'
+                      : (latestQuote.author_speaker || '').toLowerCase().includes('núria') || (latestQuote.author_speaker || '').toLowerCase().includes('nuria')
                       ? 'Núria 💗'
                       : (latestQuote.author_speaker || '').toLowerCase().includes('andino') || (latestQuote.author_speaker || '').toLowerCase().includes('andi')
                       ? 'Andino 🧉'
@@ -272,8 +274,8 @@ export async function mountDashboard(container, navigate) {
               </div>
             ` : `
               <div class="widget-empty">
-                <p>No funny quotes pinned yet.</p>
-                <button class="btn-secondary-sm" data-nav="/quotes" style="margin-top: 8px;">Pin a Quote</button>
+                <p>No notes pinned yet.</p>
+                <button class="btn-secondary-sm" data-nav="/quotes" style="margin-top: 8px;">Pin a Note</button>
               </div>
             `}
           </div>
@@ -503,22 +505,22 @@ export function mountPublicHome(container, navigate) {
             </ul>
           </article>
 
-          <!-- Feature 4: The Fridge & Mirror Quotes Board -->
+          <!-- Feature 4: Note Board -->
           <article class="public-feature-card glass-panel">
             <div class="feature-card-header">
               <div class="feature-icon-wrap icon-quotes">
-                <span>🧲</span>
+                <span>📌</span>
               </div>
-              <span class="feature-pill">Whiteboard & Pinboard</span>
+              <span class="feature-pill">Shared Pinboard</span>
             </div>
-            <h3 class="feature-title">Fridge & Mirror Quotes</h3>
+            <h3 class="feature-title">Note Board</h3>
             <p class="feature-desc">
-              A playful digital corkboard and fridge door for funny one-liners, sweet mirror notes, and memorable things we say to each other around the apartment.
+              A playful digital board for funny one-liners, sweet reminders, and memorable things we say to each other.
             </p>
             <ul class="feature-bullets">
-              <li>Sticky notes, magnetic tiles, and mirror marker styles</li>
-              <li>Filter by speaker (Núria, Andino) or note placement</li>
-              <li>Heart reactions and quick handwriting-style quotes</li>
+              <li>Sticky notes, tiles, and frosted glass styles</li>
+              <li>Filter by speaker (Núria 💗, Andino 🧉, Both 👫)</li>
+              <li>Emoji sticker stamps and quick handwriting quotes</li>
             </ul>
           </article>
         </div>

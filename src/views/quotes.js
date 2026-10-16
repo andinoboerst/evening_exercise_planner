@@ -1,13 +1,13 @@
-import { 
-  getActiveHousehold, 
-  supabase, 
+import {
+  getActiveHousehold,
+  supabase,
   isSupabaseConfigured,
   generateUUID
 } from '../services/supabase.js';
 
 export async function mountQuotes(container, navigate) {
   const household = await getActiveHousehold();
-  
+
   // State
   let quotes = [];
   let filter = 'all'; // 'all', 'nuria', 'andino'
@@ -19,7 +19,7 @@ export async function mountQuotes(container, navigate) {
   const STORAGE_QUOTES_KEY = 'andinu_cache_quotes';
 
   // Available reaction emojis
-  const REACTION_EMOJIS = ['💗', '😂', '🧉', '💋', '👀', '🔥', '🐈', '✨'];
+  const REACTION_EMOJIS = ['💗', '😂', '🧉', '☕️', '💋', '👀', '🔥', '🐈', '✨'];
 
   // Curated starter quotes with authentic fridge/mirror whiteboard vibes
   const STARTER_QUOTES = [
@@ -27,9 +27,9 @@ export async function mountQuotes(container, navigate) {
       id: 'q-1',
       quote_text: "If we eat the cookies standing up by the pantry, the calories don't count.",
       author_speaker: 'Núria 💗',
-      context_or_location: 'Pinned to the fridge',
+      context_or_location: 'Pantry confession',
       style_variant: 'sticky-yellow',
-      magnet_icon: '🧲',
+      magnet_icon: '📌',
       reactions: ['💗', '😂'],
       created_at: new Date(Date.now() - 86400000 * 2).toISOString()
     },
@@ -37,9 +37,9 @@ export async function mountQuotes(container, navigate) {
       id: 'q-2',
       quote_text: "Please remember that you love me before you inspect how I loaded the dishwasher.",
       author_speaker: 'Núria 💗',
-      context_or_location: 'Written in marker on bathroom mirror',
+      context_or_location: 'Kitchen dishwasher reminder',
       style_variant: 'mirror-marker',
-      magnet_icon: '🪞',
+      magnet_icon: '📌',
       reactions: ['💋', '😂'],
       created_at: new Date(Date.now() - 86400000 * 4).toISOString()
     },
@@ -57,7 +57,7 @@ export async function mountQuotes(container, navigate) {
       id: 'q-4',
       quote_text: "I went to the supermarket for oat milk and somehow returned with three vinyl records.",
       author_speaker: 'Andino 🧉',
-      context_or_location: 'Kitchen counter confession',
+      context_or_location: 'Record store detour',
       style_variant: 'fridge-magnet',
       magnet_icon: '🍋',
       reactions: ['😂', '🔥'],
@@ -67,7 +67,7 @@ export async function mountQuotes(container, navigate) {
       id: 'q-5',
       quote_text: "We should adopt a cat. Or maybe two cats and a puppy.",
       author_speaker: 'Núria 💗',
-      context_or_location: 'Lipstick note on hallway mirror',
+      context_or_location: 'Living room pitch',
       style_variant: 'sticky-pink',
       magnet_icon: '🐈',
       reactions: ['💗', '🐈'],
@@ -199,10 +199,10 @@ export async function mountQuotes(container, navigate) {
         <div class="quotes-header">
           <div class="quotes-header-text">
             <div class="quotes-tag-pill">
-              <span>🧲 Fridge &amp; Mirror Board</span>
+              <span>📌 Note Board</span>
             </div>
-            <h1 class="quotes-title">Our Words &amp; Phrases</h1>
-            <p class="quotes-subtitle">Funny things said, lipstick mirror scribbles, and fridge magnet quotes.</p>
+            <h1 class="quotes-title">Note Board</h1>
+            <p class="quotes-subtitle">Funny phrases, sweet reminders, and things we say to each other.</p>
           </div>
           <button id="btn-open-add-quote" class="quotes-primary-action-btn">
             <span>📌</span> Stick a Note
@@ -230,15 +230,15 @@ export async function mountQuotes(container, navigate) {
           ${filtered.length > 0 ? `
             <div class="quotes-grid">
               ${filtered.map((q, idx) => {
-                const rotationClass = `rotate-tilt-${(idx % 6) + 1}`;
-                const cardReactions = Array.isArray(q.reactions) ? q.reactions : [];
-                const isPickerOpen = activePickerQuoteId === q.id;
+      const rotationClass = `rotate-tilt-${(idx % 6) + 1}`;
+      const cardReactions = Array.isArray(q.reactions) ? q.reactions : [];
+      const isPickerOpen = activePickerQuoteId === q.id;
 
-                return `
+      return `
                   <article class="quote-card style-${q.style_variant || 'sticky-yellow'} ${rotationClass}" data-quote-id="${q.id}">
                     <!-- Pin / Magnet header -->
-                    <div class="quote-magnet-head" title="${escapeHtml(q.magnet_icon || '🧲')}">
-                      <span class="quote-magnet-icon">${q.magnet_icon || '🧲'}</span>
+                    <div class="quote-magnet-head" title="${escapeHtml(q.magnet_icon || '📌')}">
+                      <span class="quote-magnet-icon">${q.magnet_icon || '📌'}</span>
                     </div>
 
                     <!-- Quote Body -->
@@ -317,13 +317,13 @@ export async function mountQuotes(container, navigate) {
                     </div>
                   </article>
                 `;
-              }).join('')}
+    }).join('')}
             </div>
           ` : `
             <div class="quotes-empty-state glass-panel text-center">
-              <span class="empty-board-icon">🧲</span>
+              <span class="empty-board-icon">📌</span>
               <h3>This section of the board is empty</h3>
-              <p>Stick a funny quote or mirror scribble to start this collection!</p>
+              <p>Stick a funny quote or sweet note to start this collection!</p>
               <button id="btn-empty-add-quote" class="quotes-primary-action-btn" style="margin-top: 14px;">
                 <span>📌</span> Stick a Note
               </button>
@@ -346,21 +346,21 @@ export async function mountQuotes(container, navigate) {
     const isEdit = Boolean(editingQuote);
 
     const activeStyle = editingQuote?.style_variant || 'sticky-yellow';
-    const activeMagnet = editingQuote?.magnet_icon || '🧲';
+    const activeMagnet = editingQuote?.magnet_icon || '📌';
     const activeAuthor = editingQuote ? formatSpeaker(editingQuote.author_speaker) : 'Núria 💗';
-    const activeContext = editingQuote?.context_or_location || 'Pinned to the fridge';
+    const activeContext = editingQuote?.context_or_location || '';
     const activeText = editingQuote?.quote_text || '';
 
     const STYLES = [
       { id: 'sticky-yellow', label: 'Yellow Post-It', color: '#FEF08A' },
-      { id: 'fridge-magnet', label: 'Fridge Magnet Tile', color: '#FFFFFF' },
+      { id: 'fridge-magnet', label: 'Magnet Tile', color: '#FFFFFF' },
       { id: 'mirror-marker', label: 'Mirror Glass', color: '#E0F2FE' },
       { id: 'sticky-pink', label: 'Pastel Rose', color: '#FCE7F3' },
       { id: 'sticky-mint', label: 'Mint Leaf', color: '#DCFCE7' },
       { id: 'sticky-blue', label: 'Sky Blue', color: '#E0F2FE' }
     ];
 
-    const MAGNETS = ['🧲', '📌', '🥑', '🍋', '🐈', '🍓', '⭐️', '☕', '🥐', '❤️', '🍕', '🌵'];
+    const MAGNETS = ['📌', '🗒️', '💛', '🥑', '🍋', '🐈', '🍓', '⭐️', '☕', '🥐', '❤️', '🍕'];
 
     return `
       <div id="modal-quote-dialog" class="modal-backdrop" style="display: flex;">
@@ -437,9 +437,9 @@ export async function mountQuotes(container, navigate) {
               <input type="hidden" id="input-quote-style" value="${activeStyle}" />
             </div>
 
-            <!-- Magnet / Pin Picker -->
+            <!-- Pin / Icon Picker -->
             <div class="form-group" style="margin-top: 14px;">
-              <label>Magnet or Pin</label>
+              <label>Pin or Icon</label>
               <div class="magnet-choice-row">
                 ${MAGNETS.map(m => `
                   <button 
@@ -616,7 +616,7 @@ export async function mountQuotes(container, navigate) {
       const author = container.querySelector('#input-quote-author')?.value?.trim() || 'Núria 💗';
       const context = container.querySelector('#input-quote-context')?.value?.trim() || '';
       const style = container.querySelector('#input-quote-style')?.value || 'sticky-yellow';
-      const magnet = container.querySelector('#input-quote-magnet')?.value || '🧲';
+      const magnet = container.querySelector('#input-quote-magnet')?.value || '📌';
 
       if (!text) return;
 
