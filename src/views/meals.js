@@ -986,8 +986,10 @@ export async function mountMeals(container, navigate) {
                   <span class="pantry-item-name">${esc(item.ingredient_name)} ${isStapleItem(item) ? '<span class="mp-chip mp-chip-good" title="Staples are never removed automatically">⭐ Staple</span>' : ''}</span>
                   <span class="pantry-item-meta">${esc(amountLabel(item))} ${amountLabel(item) ? '•' : ''} ${esc(item.category || 'Pantry')}</span>
                 </div>
-                <button class="btn-item-delete-sm" data-action="toggle-staple" data-id="${item.id}" title="${isStapleItem(item) ? 'Make it a normal item (auto-removed when cooked)' : 'Mark as staple (never auto-removed)'}" aria-label="Toggle staple">${isStapleItem(item) ? '★' : '☆'}</button>
-                <button class="btn-item-delete-sm" data-action="delete-pantry" data-id="${item.id}" title="Remove from pantry" aria-label="Remove ${esc(item.ingredient_name)} from pantry">🗑</button>
+                <div class="pantry-item-controls">
+                  <button class="btn-item-staple-sm ${isStapleItem(item) ? 'is-staple' : ''}" data-action="toggle-staple" data-id="${item.id}" title="${isStapleItem(item) ? 'Staple item (never auto-removed) — click to unmark' : 'Mark as staple (never auto-removed)'}" aria-label="Toggle staple">${isStapleItem(item) ? '★' : '☆'}</button>
+                  <button class="btn-item-delete-sm" data-action="delete-pantry" data-id="${item.id}" title="Remove from pantry" aria-label="Remove ${esc(item.ingredient_name)} from pantry">🗑</button>
+                </div>
               </div>`).join('')}
             ${items.length === 0 ? '<p class="empty-col-note">Your pantry is empty. Add what you have, or tick off items on the shopping list.</p>' : ''}
           </div>

@@ -3387,20 +3387,34 @@ body.theme-meals .pantry-stock-pill {
   background: #FCE1D0;
 }
 
+.btn-item-staple-sm,
 .btn-item-delete-sm {
   background: transparent;
   border: none;
   color: #9E968B;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   cursor: pointer;
   padding: 4px 6px;
-  border-radius: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   transition: all 0.2s ease;
 }
 
 .btn-item-delete-sm:hover {
   color: #EF4444;
   background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-item-staple-sm:hover {
+  color: #D97706;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.btn-item-staple-sm.is-staple {
+  color: #D97706;
 }
 
 .empty-col-note {
@@ -3924,6 +3938,7 @@ body.theme-lists .view-brand-tag {
   white-space: nowrap;
 }
 
+.btn-item-edit,
 .btn-item-delete {
   background: transparent;
   border: none;
@@ -3934,12 +3949,20 @@ body.theme-lists .view-brand-tag {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.5;
+  opacity: 0.6;
   transition: all 0.2s ease;
+  font-size: 0.85rem;
+  line-height: 1;
 }
 
+.item-card:hover .btn-item-edit,
 .item-card:hover .btn-item-delete {
   opacity: 1;
+}
+
+.btn-item-edit:hover {
+  color: #2563EB;
+  background: rgba(37, 99, 235, 0.1);
 }
 
 .btn-item-delete:hover {
