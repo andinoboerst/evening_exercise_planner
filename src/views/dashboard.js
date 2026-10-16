@@ -77,7 +77,7 @@ export async function mountDashboard(container, navigate) {
     latestQuote = {
       id: 'q-demo',
       quote_text: "If we eat the cookies standing up by the pantry, the calories don't count.",
-      author_speaker: 'Núria',
+      author_speaker: 'Núria 💗',
       context_or_location: 'Pinned to the fridge',
       style_variant: 'sticky-yellow',
       magnet_icon: '🧲'
@@ -260,7 +260,13 @@ export async function mountDashboard(container, navigate) {
                 <span class="dash-quote-magnet">${latestQuote.magnet_icon || '🧲'}</span>
                 <p class="dash-quote-text">“${latestQuote.quote_text}”</p>
                 <div class="dash-quote-meta">
-                  <span class="dash-quote-author">— ${latestQuote.author_speaker || 'Núria'}</span>
+                  <span class="dash-quote-author">— ${
+                    (latestQuote.author_speaker || '').toLowerCase().includes('núria') || (latestQuote.author_speaker || '').toLowerCase().includes('nuria')
+                      ? 'Núria 💗'
+                      : (latestQuote.author_speaker || '').toLowerCase().includes('andino') || (latestQuote.author_speaker || '').toLowerCase().includes('andi')
+                      ? 'Andino 🧉'
+                      : (latestQuote.author_speaker || 'Núria 💗')
+                  }</span>
                   ${latestQuote.context_or_location ? `<span class="dash-quote-loc">📍 ${latestQuote.context_or_location}</span>` : ''}
                 </div>
               </div>

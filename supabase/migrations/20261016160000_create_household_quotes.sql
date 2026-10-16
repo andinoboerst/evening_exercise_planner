@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.household_quotes (
   style_variant TEXT NOT NULL DEFAULT 'sticky-yellow',
   magnet_icon TEXT NOT NULL DEFAULT '🧲',
   likes_count INTEGER NOT NULL DEFAULT 0,
+  reactions JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

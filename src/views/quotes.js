@@ -13,63 +13,80 @@ export async function mountQuotes(container, navigate) {
   let filter = 'all'; // 'all', 'nuria', 'andino', 'fridge', 'mirror'
   let isModalOpen = false;
   let editingQuoteId = null;
+  let activePickerQuoteId = null;
 
   // Local storage cache key
   const STORAGE_QUOTES_KEY = 'andinu_cache_quotes';
+
+  // Available reaction emojis
+  const REACTION_EMOJIS = ['💗', '😂', '🧉', '💋', '👀', '🔥', '🐈', '✨'];
 
   // Curated starter quotes with authentic fridge/mirror whiteboard vibes
   const STARTER_QUOTES = [
     {
       id: 'q-1',
       quote_text: "If we eat the cookies standing up by the pantry, the calories don't count.",
-      author_speaker: 'Núria',
+      author_speaker: 'Núria 💗',
       context_or_location: 'Pinned to the fridge',
       style_variant: 'sticky-yellow',
       magnet_icon: '🧲',
-      likes_count: 5,
+      reactions: ['💗', '😂'],
       created_at: new Date(Date.now() - 86400000 * 2).toISOString()
     },
     {
       id: 'q-2',
       quote_text: "Please remember that you love me before you inspect how I loaded the dishwasher.",
-      author_speaker: 'Núria',
+      author_speaker: 'Núria 💗',
       context_or_location: 'Written in marker on bathroom mirror',
       style_variant: 'mirror-marker',
       magnet_icon: '🪞',
-      likes_count: 8,
+      reactions: ['💋', '😂'],
       created_at: new Date(Date.now() - 86400000 * 4).toISOString()
     },
     {
       id: 'q-3',
       quote_text: "I wasn't asleep, I was just resting my eyes while aggressively listening.",
-      author_speaker: 'Andino',
+      author_speaker: 'Andino 🧉',
       context_or_location: 'On the sofa during movie night',
       style_variant: 'sticky-mint',
       magnet_icon: '🥑',
-      likes_count: 6,
+      reactions: ['🧉', '👀'],
       created_at: new Date(Date.now() - 86400000 * 5).toISOString()
     },
     {
       id: 'q-4',
       quote_text: "I went to the supermarket for oat milk and somehow returned with three vinyl records.",
-      author_speaker: 'Andino',
+      author_speaker: 'Andino 🧉',
       context_or_location: 'Kitchen counter confession',
       style_variant: 'fridge-magnet',
       magnet_icon: '🍋',
-      likes_count: 4,
+      reactions: ['😂', '🔥'],
       created_at: new Date(Date.now() - 86400000 * 7).toISOString()
     },
     {
       id: 'q-5',
       quote_text: "We should adopt a cat. Or maybe two cats and a puppy.",
-      author_speaker: 'Núria',
+      author_speaker: 'Núria 💗',
       context_or_location: 'Lipstick note on hallway mirror',
       style_variant: 'sticky-pink',
       magnet_icon: '🐈',
-      likes_count: 12,
+      reactions: ['💗', '🐈'],
       created_at: new Date(Date.now() - 86400000 * 9).toISOString()
     }
   ];
+
+  function formatSpeaker(name) {
+    if (!name) return 'Núria 💗';
+    const clean = String(name).trim();
+    const lower = clean.toLowerCase();
+    if (lower === 'núria' || lower === 'nuria' || lower.includes('núria') || lower.includes('nuria')) {
+      return 'Núria 💗';
+    }
+    if (lower === 'andino' || lower === 'andi' || lower.includes('andino') || lower.includes('andi')) {
+      return 'Andino 🧉';
+    }
+    return clean;
+  }
 
   async function loadData() {
     if (isSupabaseConfigured && household?.id) {
@@ -80,7 +97,11 @@ export async function mountQuotes(container, navigate) {
           .order('created_at', { ascending: false });
 
         if (!error && data && data.length > 0) {
-          quotes = data;
+          quotes = data.map(q => ({
+            ...q,
+            author_speaker: formatSpeaker(q.author_speaker),
+            reactions: Array.isArray(q.reactions) ? q.reactions : []
+          }));
         } else if (!error && data && data.length === 0) {
           // Auto-seed starter quotes to Supabase for this household
           const payload = STARTER_QUOTES.map(q => ({
@@ -91,7 +112,7 @@ export async function mountQuotes(container, navigate) {
             context_or_location: q.context_or_location,
             style_variant: q.style_variant,
             magnet_icon: q.magnet_icon,
-            likes_count: q.likes_count,
+            reactions: q.reactions || [],
             created_at: q.created_at
           }));
           const { data: created } = await supabase
@@ -108,6 +129,12 @@ export async function mountQuotes(container, navigate) {
     if (quotes.length === 0) {
       const cached = localStorage.getItem(STORAGE_QUOTES_KEY);
       quotes = cached ? JSON.parse(cached) : [...STARTER_QUOTES];
+      // Normalize cached entries
+      quotes = quotes.map(q => ({
+        ...q,
+        author_speaker: formatSpeaker(q.author_speaker),
+        reactions: Array.isArray(q.reactions) ? q.reactions : []
+      }));
     }
   }
 
@@ -125,7 +152,7 @@ export async function mountQuotes(container, navigate) {
     if (!isoStr) return '';
     try {
       const d = new Date(isoStr);
-      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
       return '';
     }
@@ -169,10 +196,10 @@ export async function mountQuotes(container, navigate) {
             All Board (${quotes.length})
           </button>
           <button class="quotes-filter-pill ${filter === 'nuria' ? 'active' : ''}" data-filter="nuria">
-            Núria Said 💕 (${nuriaCount})
+            Núria 💗 (${nuriaCount})
           </button>
           <button class="quotes-filter-pill ${filter === 'andino' ? 'active' : ''}" data-filter="andino">
-            Andino Said 🕺 (${andinoCount})
+            Andino 🧉 (${andinoCount})
           </button>
           <button class="quotes-filter-pill ${filter === 'fridge' ? 'active' : ''}" data-filter="fridge">
             Fridge 🧲
@@ -188,6 +215,9 @@ export async function mountQuotes(container, navigate) {
             <div class="quotes-grid">
               ${filtered.map((q, idx) => {
                 const rotationClass = `rotate-tilt-${(idx % 6) + 1}`;
+                const cardReactions = Array.isArray(q.reactions) ? q.reactions : [];
+                const isPickerOpen = activePickerQuoteId === q.id;
+
                 return `
                   <article class="quote-card style-${q.style_variant || 'sticky-yellow'} ${rotationClass}" data-quote-id="${q.id}">
                     <!-- Pin / Magnet header -->
@@ -202,7 +232,7 @@ export async function mountQuotes(container, navigate) {
 
                     <!-- Attribution & Context -->
                     <div class="quote-attribution-wrap">
-                      <div class="quote-author-name">— ${escapeHtml(q.author_speaker || 'Someone')}</div>
+                      <div class="quote-author-name">— ${escapeHtml(formatSpeaker(q.author_speaker))}</div>
                       ${q.context_or_location ? `
                         <div class="quote-context-location">
                           <span>📍</span>
@@ -211,15 +241,56 @@ export async function mountQuotes(container, navigate) {
                       ` : ''}
                     </div>
 
+                    <!-- Reactions Strip (No counters, purely visual emoji stickers) -->
+                    <div class="quote-reactions-strip">
+                      <div class="quote-stamps-wrap">
+                        ${cardReactions.map(emoji => `
+                          <button 
+                            class="quote-reaction-stamp" 
+                            data-action="toggle-reaction" 
+                            data-id="${q.id}" 
+                            data-emoji="${emoji}" 
+                            title="Remove ${emoji} sticker"
+                          >
+                            <span>${emoji}</span>
+                          </button>
+                        `).join('')}
+
+                        <!-- Add Reaction Trigger -->
+                        <div class="reaction-picker-anchor">
+                          <button 
+                            class="btn-quote-react-add ${isPickerOpen ? 'active' : ''}" 
+                            data-action="toggle-picker" 
+                            data-id="${q.id}" 
+                            title="Stick an emoji reaction"
+                          >
+                            <span>✨</span>
+                          </button>
+
+                          ${isPickerOpen ? `
+                            <div class="reaction-popover-tray glass-panel">
+                              ${REACTION_EMOJIS.map(em => `
+                                <button 
+                                  class="reaction-popover-item ${cardReactions.includes(em) ? 'selected' : ''}" 
+                                  data-action="pick-reaction" 
+                                  data-id="${q.id}" 
+                                  data-emoji="${em}"
+                                  title="${cardReactions.includes(em) ? 'Remove ' + em : 'Stick ' + em}"
+                                >
+                                  ${em}
+                                </button>
+                              `).join('')}
+                            </div>
+                          ` : ''}
+                        </div>
+                      </div>
+                    </div>
+
                     <!-- Card Actions Footer -->
                     <div class="quote-card-footer">
                       <span class="quote-date-label">${formatDate(q.created_at)}</span>
 
                       <div class="quote-footer-actions">
-                        <button class="btn-quote-like" data-action="like-quote" data-id="${q.id}" title="Love this quote!">
-                          <span class="like-heart">❤️</span>
-                          <span class="like-count">${q.likes_count || 0}</span>
-                        </button>
                         <button class="btn-quote-icon-sm" data-action="edit-quote" data-id="${q.id}" title="Edit note">
                           ✏️
                         </button>
@@ -260,7 +331,7 @@ export async function mountQuotes(container, navigate) {
 
     const activeStyle = editingQuote?.style_variant || 'sticky-yellow';
     const activeMagnet = editingQuote?.magnet_icon || '🧲';
-    const activeAuthor = editingQuote?.author_speaker || 'Núria';
+    const activeAuthor = editingQuote ? formatSpeaker(editingQuote.author_speaker) : 'Núria 💗';
     const activeContext = editingQuote?.context_or_location || 'Pinned to the fridge';
     const activeText = editingQuote?.quote_text || '';
 
@@ -300,11 +371,11 @@ export async function mountQuotes(container, navigate) {
             <div class="form-group" style="margin-top: 14px;">
               <label>Who said or wrote it?</label>
               <div class="quote-author-picker">
-                <button type="button" class="author-choice-btn ${activeAuthor === 'Núria' ? 'selected' : ''}" data-author="Núria">
-                  Núria 💕
+                <button type="button" class="author-choice-btn ${activeAuthor === 'Núria 💗' ? 'selected' : ''}" data-author="Núria 💗">
+                  Núria 💗
                 </button>
-                <button type="button" class="author-choice-btn ${activeAuthor === 'Andino' ? 'selected' : ''}" data-author="Andino">
-                  Andino 🕺
+                <button type="button" class="author-choice-btn ${activeAuthor === 'Andino 🧉' ? 'selected' : ''}" data-author="Andino 🧉">
+                  Andino 🧉
                 </button>
                 <button type="button" class="author-choice-btn ${activeAuthor === 'Both of us' ? 'selected' : ''}" data-author="Both of us">
                   Both 👫
@@ -376,11 +447,14 @@ export async function mountQuotes(container, navigate) {
                   <p id="preview-quote-text" class="quote-main-text">“${escapeHtml(activeText || 'Your funny quote will appear here...')}”</p>
                 </div>
                 <div class="quote-attribution-wrap">
-                  <div id="preview-quote-author" class="quote-author-name">— ${escapeHtml(activeAuthor || 'Núria')}</div>
+                  <div id="preview-quote-author" class="quote-author-name">— ${escapeHtml(activeAuthor)}</div>
                   <div id="preview-quote-context" class="quote-context-location">
                     <span>📍</span>
                     <span>${escapeHtml(activeContext || 'On the fridge')}</span>
                   </div>
+                </div>
+                <div class="quote-card-footer" style="margin-top: 10px;">
+                  <span class="quote-date-label">${formatDate(editingQuote?.created_at || new Date().toISOString())}</span>
                 </div>
               </div>
             </div>
@@ -394,11 +468,39 @@ export async function mountQuotes(container, navigate) {
     `;
   }
 
+  async function toggleReaction(quoteId, emoji) {
+    const target = quotes.find(q => q.id === quoteId);
+    if (!target) return;
+    if (!Array.isArray(target.reactions)) {
+      target.reactions = [];
+    }
+    const idx = target.reactions.indexOf(emoji);
+    if (idx > -1) {
+      target.reactions.splice(idx, 1);
+    } else {
+      target.reactions.push(emoji);
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('household_quotes')
+          .update({ reactions: target.reactions })
+          .eq('id', quoteId);
+      } catch (e) {
+        console.warn('Could not update reactions in Supabase:', e);
+      }
+    }
+    localStorage.setItem(STORAGE_QUOTES_KEY, JSON.stringify(quotes));
+    render();
+  }
+
   function attachEvents() {
     // Filter pills
     container.querySelectorAll('.quotes-filter-pill').forEach(btn => {
       btn.addEventListener('click', () => {
         filter = btn.getAttribute('data-filter');
+        activePickerQuoteId = null;
         render();
       });
     });
@@ -406,6 +508,7 @@ export async function mountQuotes(container, navigate) {
     // Open add modal
     const openAdd = () => {
       editingQuoteId = null;
+      activePickerQuoteId = null;
       isModalOpen = true;
       render();
     };
@@ -439,7 +542,7 @@ export async function mountQuotes(container, navigate) {
 
     // Custom author input live update
     container.querySelector('#input-quote-author')?.addEventListener('input', (e) => {
-      const val = e.target.value.trim() || 'Someone';
+      const val = e.target.value.trim() || 'Núria 💗';
       const previewAuthor = container.querySelector('#preview-quote-author');
       if (previewAuthor) previewAuthor.textContent = `— ${val}`;
     });
@@ -494,8 +597,8 @@ export async function mountQuotes(container, navigate) {
     container.querySelector('#form-quote-upsert')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const text = container.querySelector('#input-quote-text')?.value?.trim();
-      const author = container.querySelector('#input-quote-author')?.value?.trim() || 'Núria';
-      const context = container.querySelector('#input-quote-context')?.value?.trim() || 'On the fridge';
+      const author = container.querySelector('#input-quote-author')?.value?.trim() || 'Núria 💗';
+      const context = container.querySelector('#input-quote-context')?.value?.trim() || '';
       const style = container.querySelector('#input-quote-style')?.value || 'sticky-yellow';
       const magnet = container.querySelector('#input-quote-magnet')?.value || '🧲';
 
@@ -538,7 +641,7 @@ export async function mountQuotes(container, navigate) {
           context_or_location: context,
           style_variant: style,
           magnet_icon: magnet,
-          likes_count: 0,
+          reactions: ['💗'],
           created_at: new Date().toISOString()
         };
 
@@ -550,7 +653,7 @@ export async function mountQuotes(container, navigate) {
             .single();
 
           if (data) {
-            quotes.unshift(data);
+            quotes.unshift({ ...data, reactions: ['💗'] });
           } else if (error) {
             console.warn('Error inserting quote to Supabase:', error);
             quotes.unshift(newQuote);
@@ -566,30 +669,34 @@ export async function mountQuotes(container, navigate) {
       render();
     });
 
-    // Like button
-    container.querySelectorAll('[data-action="like-quote"]').forEach(btn => {
+    // Reaction stamp toggle
+    container.querySelectorAll('[data-action="toggle-reaction"]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.getAttribute('data-id');
-        const target = quotes.find(q => q.id === id);
-        if (!target) return;
+        const emoji = btn.getAttribute('data-emoji');
+        await toggleReaction(id, emoji);
+      });
+    });
 
-        target.likes_count = (target.likes_count || 0) + 1;
-        
-        // Animated bump
-        const countSpan = btn.querySelector('.like-count');
-        if (countSpan) countSpan.textContent = target.likes_count;
-        btn.classList.add('liked-bump');
-        setTimeout(() => btn.classList.remove('liked-bump'), 300);
+    // Toggle reaction picker popover
+    container.querySelectorAll('[data-action="toggle-picker"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        activePickerQuoteId = activePickerQuoteId === id ? null : id;
+        render();
+      });
+    });
 
-        if (isSupabaseConfigured) {
-          await supabase
-            .from('household_quotes')
-            .update({ likes_count: target.likes_count })
-            .eq('id', id);
-        } else {
-          localStorage.setItem(STORAGE_QUOTES_KEY, JSON.stringify(quotes));
-        }
+    // Pick reaction from popover
+    container.querySelectorAll('[data-action="pick-reaction"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const emoji = btn.getAttribute('data-emoji');
+        activePickerQuoteId = null;
+        await toggleReaction(id, emoji);
       });
     });
 
@@ -598,6 +705,7 @@ export async function mountQuotes(container, navigate) {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         editingQuoteId = btn.getAttribute('data-id');
+        activePickerQuoteId = null;
         isModalOpen = true;
         render();
       });
@@ -622,6 +730,14 @@ export async function mountQuotes(container, navigate) {
       });
     });
   }
+
+  // Close reaction picker on outside click
+  document.addEventListener('click', (e) => {
+    if (activePickerQuoteId && !e.target.closest('.reaction-picker-anchor')) {
+      activePickerQuoteId = null;
+      render();
+    }
+  });
 
   await loadData();
   render();
