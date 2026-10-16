@@ -6,11 +6,12 @@ import { mountDashboard, mountPublicHome } from './views/dashboard.js';
 import { mountRoutine, unmountRoutine } from './views/routine.js';
 import { mountMeals } from './views/meals.js';
 import { mountLists } from './views/lists.js';
+import { mountQuotes } from './views/quotes.js';
 import { mountPrivacyPolicy } from './views/privacy-policy.js';
 import { mountTermsOfService } from './views/terms-of-service.js';
 
 export function applyRouteTheme(path) {
-  document.body.classList.remove('theme-hub', 'theme-routine', 'theme-meals', 'theme-lists');
+  document.body.classList.remove('theme-hub', 'theme-routine', 'theme-meals', 'theme-lists', 'theme-quotes');
   
   if (path === '/routine') {
     document.body.classList.add('theme-routine');
@@ -18,6 +19,8 @@ export function applyRouteTheme(path) {
     document.body.classList.add('theme-meals');
   } else if (path === '/lists') {
     document.body.classList.add('theme-lists');
+  } else if (path === '/quotes') {
+    document.body.classList.add('theme-quotes');
   } else {
     document.body.classList.add('theme-hub');
   }
@@ -145,6 +148,8 @@ class AppRouter {
       mountMeals(viewContainer, (p) => this.navigate(p));
     } else if (path === '/lists') {
       mountLists(viewContainer, (p) => this.navigate(p));
+    } else if (path === '/quotes') {
+      mountQuotes(viewContainer, (p) => this.navigate(p));
     } else {
       // Fallback redirect to /
       this.navigate('/');

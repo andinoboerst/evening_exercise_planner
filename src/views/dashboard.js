@@ -13,15 +13,15 @@ export async function mountDashboard(container, navigate) {
   const household = await getActiveHousehold();
   const members = await getHouseholdMembers(household?.id);
 
-  // Get summary data: Tonight's planned meal & Recent list items
+  // Get summary data: Tonight's planned meal, Recent list items & Latest quote
   let tonightMeal = null;
   let recentListItems = [];
+  let latestQuote = null;
 
   if (isSupabaseConfigured && household?.id) {
     try {
       // Fetch today's meal plan day
       const today = new Date().getDay(); // 0 is Sun, 1 is Mon...
-      // Adjust to Monday = 0
       const dayOfWeek = (today + 6) % 7;
 
       const { data: planDays } = await supabase
@@ -45,6 +45,17 @@ export async function mountDashboard(container, navigate) {
       if (listItems) {
         recentListItems = listItems;
       }
+
+      // Fetch latest quote
+      const { data: quoteItems } = await supabase
+        .from('household_quotes')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (quoteItems && quoteItems.length > 0) {
+        latestQuote = quoteItems[0];
+      }
     } catch (e) {
       console.warn('Dashboard fetch error:', e);
     }
@@ -63,6 +74,14 @@ export async function mountDashboard(container, navigate) {
       { id: 'm2', title: 'In Rainbows', is_completed: false, list_categories: { name: 'Vinyl', icon: '🎵' } },
       { id: 'm3', title: 'Kyoto & Kamakura', is_completed: false, list_categories: { name: 'Places', icon: '✈️' } }
     ];
+    latestQuote = {
+      id: 'q-demo',
+      quote_text: "If we eat the cookies standing up by the pantry, the calories don't count.",
+      author_speaker: 'Núria',
+      context_or_location: 'Pinned to the fridge',
+      style_variant: 'sticky-yellow',
+      magnet_icon: '🧲'
+    };
   }
 
   const partnerMember = members.find(m => m.email && m.email !== user?.email);
@@ -142,6 +161,22 @@ export async function mountDashboard(container, navigate) {
             <span class="card-arrow">→</span>
           </div>
         </div>
+
+        <!-- 4. Fridge & Mirror Quotes -->
+        <div class="app-launch-card card-quotes glass-panel" data-nav="/quotes">
+          <div class="card-badge">Fridge & Mirror</div>
+          <div class="card-icon-wrap icon-quotes">
+            <span>🧲</span>
+          </div>
+          <div class="card-body">
+            <h2 class="card-title">Quotes & Notes</h2>
+            <p class="card-desc">Funny phrases, sweet mirror notes, and fridge magnets we leave for each other.</p>
+          </div>
+          <div class="card-footer">
+            <span class="card-action-label">Open Quotes Board</span>
+            <span class="card-arrow">→</span>
+          </div>
+        </div>
       </section>
 
       <!-- Quick Summary Widgets -->
@@ -204,6 +239,35 @@ export async function mountDashboard(container, navigate) {
               <div class="widget-empty">
                 <p>No list items added yet.</p>
                 <button class="btn-secondary-sm" data-nav="/lists" style="margin-top: 8px;">Add Items to Wishlist</button>
+              </div>
+            `}
+          </div>
+        </div>
+
+        <!-- Quotes Preview Widget -->
+        <div class="dash-widget glass-panel">
+          <div class="widget-header">
+            <div class="widget-title-wrap">
+              <span class="widget-icon">🧲</span>
+              <h3 class="widget-title">Fridge & Mirror Pin</h3>
+            </div>
+            <a href="/quotes" class="widget-link" data-nav="/quotes">Pinboard →</a>
+          </div>
+
+          <div class="widget-body">
+            ${latestQuote ? `
+              <div class="dash-quote-preview ${latestQuote.style_variant || 'sticky-yellow'}">
+                <span class="dash-quote-magnet">${latestQuote.magnet_icon || '🧲'}</span>
+                <p class="dash-quote-text">“${latestQuote.quote_text}”</p>
+                <div class="dash-quote-meta">
+                  <span class="dash-quote-author">— ${latestQuote.author_speaker || 'Núria'}</span>
+                  ${latestQuote.context_or_location ? `<span class="dash-quote-loc">📍 ${latestQuote.context_or_location}</span>` : ''}
+                </div>
+              </div>
+            ` : `
+              <div class="widget-empty">
+                <p>No funny quotes pinned yet.</p>
+                <button class="btn-secondary-sm" data-nav="/quotes" style="margin-top: 8px;">Pin a Quote</button>
               </div>
             `}
           </div>
@@ -430,6 +494,25 @@ export function mountPublicHome(container, navigate) {
               <li>Category tabs for Movies, Vinyl Records, and Travel Places</li>
               <li>Live completion status and progress counts</li>
               <li>Personal curation notes and acquisition years</li>
+            </ul>
+          </article>
+
+          <!-- Feature 4: The Fridge & Mirror Quotes Board -->
+          <article class="public-feature-card glass-panel">
+            <div class="feature-card-header">
+              <div class="feature-icon-wrap icon-quotes">
+                <span>🧲</span>
+              </div>
+              <span class="feature-pill">Whiteboard & Pinboard</span>
+            </div>
+            <h3 class="feature-title">Fridge & Mirror Quotes</h3>
+            <p class="feature-desc">
+              A playful digital corkboard and fridge door for funny one-liners, sweet mirror notes, and memorable things we say to each other around the apartment.
+            </p>
+            <ul class="feature-bullets">
+              <li>Sticky notes, magnetic tiles, and mirror marker styles</li>
+              <li>Filter by speaker (Núria, Andino) or note placement</li>
+              <li>Heart reactions and quick handwriting-style quotes</li>
             </ul>
           </article>
         </div>

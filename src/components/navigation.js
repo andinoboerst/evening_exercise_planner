@@ -9,7 +9,8 @@ export function renderBottomDock(activePath = '/') {
     { path: '/', label: 'Home', icon: '🏠' },
     { path: '/routine', label: 'Routine', icon: '🌙' },
     { path: '/meals', label: 'Meals', icon: '🍳' },
-    { path: '/lists', label: 'Lists', icon: '📝' }
+    { path: '/lists', label: 'Lists', icon: '📝' },
+    { path: '/quotes', label: 'Quotes', icon: '🧲' }
   ];
 
   dock.innerHTML = `
@@ -52,6 +53,7 @@ export function renderTopNav(activePath = '/', title = 'AndiNú') {
         <a href="/routine" class="nav-link ${activePath === '/routine' ? 'active' : ''}" data-nav="/routine">Routine</a>
         <a href="/meals" class="nav-link ${activePath === '/meals' ? 'active' : ''}" data-nav="/meals">Meals</a>
         <a href="/lists" class="nav-link ${activePath === '/lists' ? 'active' : ''}" data-nav="/lists">Lists</a>
+        <a href="/quotes" class="nav-link ${activePath === '/quotes' ? 'active' : ''}" data-nav="/quotes">Quotes</a>
         
         <button id="nav-btn-user" class="nav-user-pill" title="Account settings">
           <span class="user-avatar">✨</span>
