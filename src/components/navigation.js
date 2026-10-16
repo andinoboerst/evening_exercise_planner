@@ -7,6 +7,7 @@ export function renderBottomDock(activePath = '/') {
 
   const items = [
     { path: '/', label: 'Home', icon: '🏠' },
+    { path: '/planner', label: 'Planner', icon: '📅' },
     { path: '/routine', label: 'Routine', icon: '🌙' },
     { path: '/meals', label: 'Meals', icon: '🍳' },
     { path: '/lists', label: 'Lists', icon: '📝' },
@@ -50,6 +51,7 @@ export function renderTopNav(activePath = '/', title = 'AndiNú') {
 
       <div class="nav-actions">
         <a href="/" class="nav-link ${activePath === '/' ? 'active' : ''}" data-nav="/">Hub</a>
+        <a href="/planner" class="nav-link ${activePath === '/planner' ? 'active' : ''}" data-nav="/planner">Planner</a>
         <a href="/routine" class="nav-link ${activePath === '/routine' ? 'active' : ''}" data-nav="/routine">Routine</a>
         <a href="/meals" class="nav-link ${activePath === '/meals' ? 'active' : ''}" data-nav="/meals">Meals</a>
         <a href="/lists" class="nav-link ${activePath === '/lists' ? 'active' : ''}" data-nav="/lists">Lists</a>

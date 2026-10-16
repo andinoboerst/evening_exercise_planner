@@ -148,9 +148,16 @@ export async function signOut() {
 
 // Get current session/user with automatic token refreshing
 export async function getCurrentUser() {
+  const mock = typeof window !== 'undefined' ? localStorage.getItem('andinu_mock_user') : null;
+  if (mock) {
+    try {
+      const parsed = JSON.parse(mock);
+      if (parsed) return parsed;
+    } catch (_) {}
+  }
+
   if (!isSupabaseConfigured) {
-    const mock = localStorage.getItem('andinu_mock_user');
-    return mock ? JSON.parse(mock) : null;
+    return null;
   }
 
   try {

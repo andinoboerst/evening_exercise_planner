@@ -28,11 +28,11 @@ export function mountLogin(container, navigate) {
             <span>Continue with Google</span>
           </button>
 
-          ${!isSupabaseConfigured ? `
-            <div class="mock-login-badge">
-              <span>⚠️ Supabase credentials not yet detected in environment.</span>
-              <button id="btn-mock-login" class="btn-secondary" style="margin-top: 10px; width: 100%;">
-                Enter in Local Preview Mode
+          ${(!isSupabaseConfigured || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))) ? `
+            <div class="mock-login-badge" style="margin-top: 14px; padding: 10px; background: #FAF7F2; border: 1px dashed #E5E0D8; border-radius: 12px; text-align: center;">
+              <span style="font-size: 0.78rem; color: #71717A;">Local Development & Preview:</span>
+              <button id="btn-dev-preview" class="btn-secondary-sm" style="margin-top: 6px; width: 100%; padding: 8px; font-weight: 600; cursor: pointer;">
+                🔑 Enter in Household Preview
               </button>
             </div>
           ` : ''}
@@ -71,11 +71,20 @@ export function mountLogin(container, navigate) {
     }
   });
 
+  document.getElementById('btn-dev-preview')?.addEventListener('click', () => {
+    localStorage.setItem('andinu_mock_user', JSON.stringify({
+      id: 'mock-andino',
+      email: 'andino.boerst@gmail.com',
+      user_metadata: { full_name: 'Andino' }
+    }));
+    navigate('/');
+  });
+
   document.getElementById('btn-mock-login')?.addEventListener('click', () => {
     localStorage.setItem('andinu_mock_user', JSON.stringify({
       id: 'mock-andino',
-      email: 'andino@andinu.cc',
-      user_metadata: { full_name: 'Andino & Núria' }
+      email: 'andino.boerst@gmail.com',
+      user_metadata: { full_name: 'Andino' }
     }));
     navigate('/');
   });

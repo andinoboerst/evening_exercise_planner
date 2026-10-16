@@ -13,10 +13,26 @@ export async function mountDashboard(container, navigate) {
   const household = await getActiveHousehold();
   const members = await getHouseholdMembers(household?.id);
 
-  // Get summary data: Tonight's planned meal, Recent list items & Latest quote
+  // Get summary data: Tonight's planned meal, Recent list items, Latest quote & Tonight's sleep plan
   let tonightMeal = null;
   let recentListItems = [];
   let latestQuote = null;
+  let tonightSleep = {
+    icon: '🏠',
+    label: 'My Place',
+    desc: 'Sleeping together at Andi’s',
+    bedtime: '23:00',
+    wakeTime: '07:30'
+  };
+  let upcomingPlannerEvents = [
+    { id: 'ev-1', title: 'Weekly Life & Meal Sync', timeLabel: '19:30', owner_type: 'together' }
+  ];
+
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const todayDateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const jsDay = now.getDay();
+  const isoDay = jsDay === 0 ? 7 : jsDay;
 
   if (isSupabaseConfigured && household?.id) {
     try {
@@ -56,6 +72,67 @@ export async function mountDashboard(container, navigate) {
       if (quoteItems && quoteItems.length > 0) {
         latestQuote = quoteItems[0];
       }
+
+      // Fetch today's sleep plan & defaults
+      const { data: dayPlanData } = await supabase
+        .from('planner_day_plans')
+        .select('*')
+        .eq('household_id', household.id)
+        .eq('plan_date', todayDateStr)
+        .limit(1);
+
+      const { data: defData } = await supabase
+        .from('planner_sleep_defaults')
+        .select('*')
+        .eq('household_id', household.id)
+        .eq('day_of_week', isoDay)
+        .limit(1);
+
+      const override = dayPlanData?.[0];
+      const def = defData?.[0];
+
+      const locKey = override?.sleep_location || def?.sleep_location || 'my_place';
+      const locMap = {
+        my_place: { icon: '🏠', label: 'My Place', desc: 'Together at Andi’s' },
+        her_place: { icon: '🏡', label: 'Her Place', desc: 'Together at Núria’s' },
+        apart: { icon: '↔️', label: 'Apart Tonight', desc: 'At our own homes' },
+        away: { icon: '✈️', label: 'Away / Trip', desc: override?.location_note || 'Traveling' }
+      };
+      const locInfo = locMap[locKey] || locMap.my_place;
+
+      tonightSleep = {
+        icon: locInfo.icon,
+        label: locInfo.label,
+        desc: locInfo.desc,
+        bedtime: (override?.bedtime || def?.bedtime || '23:00').slice(0, 5),
+        wakeTime: (override?.wake_time || def?.wake_time || '07:30').slice(0, 5)
+      };
+
+      // Fetch today's planner events
+      const { data: evData } = await supabase
+        .from('planner_events')
+        .select('*')
+        .eq('household_id', household.id)
+        .or(`event_date.eq.${todayDateStr},recurrence_type.eq.weekly`)
+        .limit(6);
+
+      if (evData && evData.length > 0) {
+        const matches = [];
+        for (const ev of evData) {
+          if (ev.event_date === todayDateStr || (ev.recurrence_type === 'weekly' && Array.isArray(ev.recurrence_days) && ev.recurrence_days.includes(isoDay))) {
+            let timeLabel = ev.is_all_day ? 'All day' : (ev.start_time ? ev.start_time.slice(0, 5) : '');
+            matches.push({
+              id: ev.id,
+              title: ev.title,
+              timeLabel,
+              owner_type: ev.owner_type
+            });
+          }
+        }
+        if (matches.length > 0) {
+          upcomingPlannerEvents = matches.slice(0, 3);
+        }
+      }
     } catch (e) {
       console.warn('Dashboard fetch error:', e);
     }
@@ -82,6 +159,16 @@ export async function mountDashboard(container, navigate) {
       style_variant: 'sticky-yellow',
       magnet_icon: '📌'
     };
+    tonightSleep = {
+      icon: '🏠',
+      label: 'My Place',
+      desc: 'Together at Andi’s',
+      bedtime: '23:00',
+      wakeTime: '07:30'
+    };
+    upcomingPlannerEvents = [
+      { id: 'e1', title: 'Weekly Life & Meal Sync', timeLabel: '19:30', owner_type: 'together' }
+    ];
   }
 
   const partnerMember = members.find(m => m.email && m.email !== user?.email);
@@ -177,10 +264,70 @@ export async function mountDashboard(container, navigate) {
             <span class="card-arrow">→</span>
           </div>
         </div>
+
+        <!-- 5. Couples Life, Sleep & Schedule Planner -->
+        <div class="app-launch-card card-planner glass-panel" data-nav="/planner">
+          <div class="card-badge">Weekly Schedule</div>
+          <div class="card-icon-wrap icon-planner">
+            <span>📅</span>
+          </div>
+          <div class="card-body">
+            <h2 class="card-title">Life & Sleep Planner</h2>
+            <p class="card-desc">Where we sleep tonight, morning alarms, weekly shared events, and 1-way Google Calendar sync.</p>
+          </div>
+          <div class="card-footer">
+            <span class="card-action-label">Open Weekly Planner</span>
+            <span class="card-arrow">→</span>
+          </div>
+        </div>
       </section>
 
       <!-- Quick Summary Widgets -->
       <section class="dash-widgets-grid">
+        <!-- Tonight's Sleep & Alarms Widget -->
+        <div class="dash-widget glass-panel">
+          <div class="widget-header">
+            <div class="widget-title-wrap">
+              <span class="widget-icon">🛏️</span>
+              <h3 class="widget-title">Tonight's Sleep & Plan</h3>
+            </div>
+            <a href="/planner" class="widget-link" data-nav="/planner">Weekly Planner →</a>
+          </div>
+
+          <div class="widget-body">
+            <div class="planner-dash-preview">
+              <div class="planner-preview-sleep">
+                <div class="planner-preview-loc">
+                  <span class="loc-emoji">${tonightSleep.icon}</span>
+                  <div>
+                    <strong class="loc-name">${tonightSleep.label}</strong>
+                    <span class="loc-desc">${tonightSleep.desc}</span>
+                  </div>
+                </div>
+                <div class="planner-preview-times">
+                  <span class="time-chip" title="Target Bedtime">🌙 Bed: ${tonightSleep.bedtime}</span>
+                  <span class="time-chip" title="Morning Alarm">⏰ Alarm: ${tonightSleep.wakeTime}</span>
+                </div>
+              </div>
+              ${upcomingPlannerEvents.length > 0 ? `
+                <div class="planner-preview-events">
+                  <span class="preview-events-header">Today's Schedule:</span>
+                  ${upcomingPlannerEvents.map(e => `
+                    <div class="planner-mini-event event-${e.owner_type}">
+                      <span class="mini-event-dot"></span>
+                      <span class="mini-event-title">${e.title}</span>
+                      <span class="mini-event-time">${e.timeLabel}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : `
+                <div class="planner-preview-note">
+                  <span>✨ No other events today. Perfect evening to relax!</span>
+                </div>
+              `}
+            </div>
+          </div>
+        </div>
         <!-- Tonight's Meal Widget -->
         <div class="dash-widget glass-panel">
           <div class="widget-header">
@@ -423,11 +570,11 @@ export function mountPublicHome(container, navigate) {
             <span>Sign in with Google</span>
           </button>
 
-          ${!isSupabaseConfigured ? `
-            <div class="mock-login-badge" style="margin-top: 12px;">
-              <span>⚠️ Supabase credentials not yet detected in environment.</span>
-              <button id="btn-public-mock-login" class="btn-secondary-sm" style="margin-top: 8px; width: 100%;">
-                Preview as Guest
+          ${(!isSupabaseConfigured || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))) ? `
+            <div class="mock-login-badge" style="margin-top: 12px; padding: 10px; background: #FAF7F2; border: 1px dashed #E5E0D8; border-radius: 12px; text-align: center;">
+              <span style="font-size: 0.78rem; color: #71717A;">Local Development & Testing:</span>
+              <button id="btn-public-mock-login" class="btn-secondary-sm" style="margin-top: 6px; width: 100%; padding: 8px; font-weight: 600; cursor: pointer;">
+                🔑 Preview Household
               </button>
             </div>
           ` : ''}
@@ -443,7 +590,7 @@ export function mountPublicHome(container, navigate) {
         <div class="public-section-header">
           <h2 class="public-section-title">What is AndiNú?</h2>
           <p class="public-section-subtitle">
-            An overview of the three integrated modules built for our shared household life.
+            An overview of the integrated modules built for our shared household life.
           </p>
         </div>
 
@@ -523,6 +670,25 @@ export function mountPublicHome(container, navigate) {
               <li>Emoji sticker stamps and quick handwriting quotes</li>
             </ul>
           </article>
+
+          <!-- Feature 5: Couples Life & Sleep Planner -->
+          <article class="public-feature-card glass-panel">
+            <div class="feature-card-header">
+              <div class="feature-icon-wrap icon-planner">
+                <span>📅</span>
+              </div>
+              <span class="feature-pill">Weekly Schedule</span>
+            </div>
+            <h3 class="feature-title">Couples Life & Sleep Planner</h3>
+            <p class="feature-desc">
+              A Scandinavian-inspired weekly calendar and sleep coordinator. Helps us decide where we sleep each night, set coordinated or individual morning wake-up alarms, and schedule mutual events.
+            </p>
+            <ul class="feature-bullets">
+              <li>1-tap daily sleep locations (My Place, Her Place, Apart, Away)</li>
+              <li>Bedtime targets and separate morning alarm automations</li>
+              <li>Strict one-way outbound sync to Google Calendar via iCal feed</li>
+            </ul>
+          </article>
         </div>
       </section>
 
@@ -580,8 +746,8 @@ export function mountPublicHome(container, navigate) {
   document.getElementById('btn-public-mock-login')?.addEventListener('click', () => {
     localStorage.setItem('andinu_mock_user', JSON.stringify({
       id: 'mock-andino',
-      email: 'andino@andinu.cc',
-      user_metadata: { full_name: 'Andino & Núria' }
+      email: 'andino.boerst@gmail.com',
+      user_metadata: { full_name: 'Andino' }
     }));
     navigate('/');
   });
