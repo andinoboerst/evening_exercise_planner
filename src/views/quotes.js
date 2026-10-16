@@ -10,7 +10,7 @@ export async function mountQuotes(container, navigate) {
   
   // State
   let quotes = [];
-  let filter = 'all'; // 'all', 'nuria', 'andino', 'fridge', 'mirror'
+  let filter = 'all'; // 'all', 'nuria', 'andino'
   let isModalOpen = false;
   let editingQuoteId = null;
   let activePickerQuoteId = null;
@@ -79,6 +79,9 @@ export async function mountQuotes(container, navigate) {
     if (!name) return 'Núria 💗';
     const clean = String(name).trim();
     const lower = clean.toLowerCase();
+    if (lower.includes('both') || (lower.includes('andino') && (lower.includes('núria') || lower.includes('nuria')))) {
+      return 'Both 👫';
+    }
     if (lower === 'núria' || lower === 'nuria' || lower.includes('núria') || lower.includes('nuria')) {
       return 'Núria 💗';
     }
@@ -86,6 +89,23 @@ export async function mountQuotes(container, navigate) {
       return 'Andino 🧉';
     }
     return clean;
+  }
+
+  function isBoth(q) {
+    const author = (q.author_speaker || '').toLowerCase();
+    return author.includes('both') || (author.includes('andino') && (author.includes('núria') || author.includes('nuria')));
+  }
+
+  function isNuria(q) {
+    if (isBoth(q)) return false;
+    const author = (q.author_speaker || '').toLowerCase();
+    return author.includes('núria') || author.includes('nuria');
+  }
+
+  function isAndino(q) {
+    if (isBoth(q)) return false;
+    const author = (q.author_speaker || '').toLowerCase();
+    return author.includes('andino') || author.includes('andi');
   }
 
   async function loadData() {
@@ -162,17 +182,16 @@ export async function mountQuotes(container, navigate) {
     // Filter quotes
     let filtered = [...quotes];
     if (filter === 'nuria') {
-      filtered = filtered.filter(q => (q.author_speaker || '').toLowerCase().includes('núria') || (q.author_speaker || '').toLowerCase().includes('nuria'));
+      filtered = filtered.filter(isNuria);
     } else if (filter === 'andino') {
-      filtered = filtered.filter(q => (q.author_speaker || '').toLowerCase().includes('andino') || (q.author_speaker || '').toLowerCase().includes('andi'));
-    } else if (filter === 'fridge') {
-      filtered = filtered.filter(q => q.style_variant === 'fridge-magnet' || (q.context_or_location || '').toLowerCase().includes('fridge'));
-    } else if (filter === 'mirror') {
-      filtered = filtered.filter(q => q.style_variant === 'mirror-marker' || (q.context_or_location || '').toLowerCase().includes('mirror'));
+      filtered = filtered.filter(isAndino);
+    } else if (filter === 'both') {
+      filtered = filtered.filter(isBoth);
     }
 
-    const nuriaCount = quotes.filter(q => (q.author_speaker || '').toLowerCase().includes('núria') || (q.author_speaker || '').toLowerCase().includes('nuria')).length;
-    const andinoCount = quotes.filter(q => (q.author_speaker || '').toLowerCase().includes('andino') || (q.author_speaker || '').toLowerCase().includes('andi')).length;
+    const nuriaCount = quotes.filter(isNuria).length;
+    const andinoCount = quotes.filter(isAndino).length;
+    const bothCount = quotes.filter(isBoth).length;
 
     container.innerHTML = `
       <div class="quotes-view-shell">
@@ -201,11 +220,8 @@ export async function mountQuotes(container, navigate) {
           <button class="quotes-filter-pill ${filter === 'andino' ? 'active' : ''}" data-filter="andino">
             Andino 🧉 (${andinoCount})
           </button>
-          <button class="quotes-filter-pill ${filter === 'fridge' ? 'active' : ''}" data-filter="fridge">
-            Fridge 🧲
-          </button>
-          <button class="quotes-filter-pill ${filter === 'mirror' ? 'active' : ''}" data-filter="mirror">
-            Mirror 🪞
+          <button class="quotes-filter-pill ${filter === 'both' ? 'active' : ''}" data-filter="both">
+            Both 👫 (${bothCount})
           </button>
         </div>
 
@@ -377,7 +393,7 @@ export async function mountQuotes(container, navigate) {
                 <button type="button" class="author-choice-btn ${activeAuthor === 'Andino 🧉' ? 'selected' : ''}" data-author="Andino 🧉">
                   Andino 🧉
                 </button>
-                <button type="button" class="author-choice-btn ${activeAuthor === 'Both of us' ? 'selected' : ''}" data-author="Both of us">
+                <button type="button" class="author-choice-btn ${activeAuthor === 'Both 👫' || activeAuthor === 'Both of us' ? 'selected' : ''}" data-author="Both 👫">
                   Both 👫
                 </button>
               </div>
