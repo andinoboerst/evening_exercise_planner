@@ -54,7 +54,7 @@ export function buildIcsString(data) {
 
   // Events
   for (const ev of events) {
-    const ownerPrefix = ev.owner_type === 'me' ? '[Me]' : (ev.owner_type === 'her' ? '[Her]' : '[Together]');
+    const ownerPrefix = ev.owner_type === 'me' ? '[An]' : (ev.owner_type === 'her' ? '[Nú]' : '[Together]');
     const summary = `${ownerPrefix} ${ev.title}`.trim();
     const uid = `andinu-event-${ev.id}@andinu.cc`;
 
@@ -127,8 +127,8 @@ export function buildIcsString(data) {
 
   // Sleep & Morning Plans for rolling 60 days
   const sleepMeta = {
-    my_place: { label: 'My Place', icon: '🏠' },
-    her_place: { label: 'Her Place', icon: '🏡' },
+    my_place: { label: "Andi's Place", icon: '🏠' },
+    her_place: { label: "Núria's Place", icon: '🏡' },
     apart: { label: 'Apart', icon: '↔️' },
     away: { label: 'Away / Trip', icon: '✈️' }
   };

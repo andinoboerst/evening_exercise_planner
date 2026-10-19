@@ -174,7 +174,7 @@ export async function mountPlanner(container, navigate) {
     try {
       const cached = localStorage.getItem(CACHE_SETTINGS_KEY);
       if (cached) settings = JSON.parse(cached);
-    } catch (_) {}
+    } catch (_) { }
 
     if (isSupabaseConfigured && household?.id) {
       try {
@@ -223,7 +223,7 @@ export async function mountPlanner(container, navigate) {
     try {
       const cachedDef = localStorage.getItem(CACHE_DEFAULTS_KEY);
       if (cachedDef) sleepDefaults = JSON.parse(cachedDef);
-    } catch (_) {}
+    } catch (_) { }
 
     if (isSupabaseConfigured && household?.id) {
       try {
@@ -268,7 +268,7 @@ export async function mountPlanner(container, navigate) {
     try {
       const cachedPlans = localStorage.getItem(CACHE_PLANS_KEY);
       if (cachedPlans) dayPlans = JSON.parse(cachedPlans);
-    } catch (_) {}
+    } catch (_) { }
 
     if (isSupabaseConfigured && household?.id) {
       try {
@@ -289,7 +289,7 @@ export async function mountPlanner(container, navigate) {
     try {
       const cachedEvents = localStorage.getItem(CACHE_EVENTS_KEY);
       if (cachedEvents) events = JSON.parse(cachedEvents);
-    } catch (_) {}
+    } catch (_) { }
 
     if (isSupabaseConfigured && household?.id) {
       try {
@@ -602,12 +602,12 @@ export async function mountPlanner(container, navigate) {
         <nav class="planner-mobile-strip-wrap" aria-label="Day selection strip">
           <div class="planner-mobile-strip">
             ${dayDataList.map(day => {
-              const dots = {
-                green: day.dayEvents.some(e => e.owner_type === 'me'),
-                blue: day.dayEvents.some(e => e.owner_type === 'her'),
-                burgundy: day.dayEvents.some(e => e.owner_type === 'together')
-              };
-              return `
+      const dots = {
+        green: day.dayEvents.some(e => e.owner_type === 'me'),
+        blue: day.dayEvents.some(e => e.owner_type === 'her'),
+        burgundy: day.dayEvents.some(e => e.owner_type === 'together')
+      };
+      return `
                 <button 
                   class="planner-day-pill ${day.isToday ? 'is-today' : ''}" 
                   data-jump-day="${day.isoDate}" 
@@ -625,7 +625,7 @@ export async function mountPlanner(container, navigate) {
                   </div>
                 </button>
               `;
-            }).join('')}
+    }).join('')}
           </div>
         </nav>
 
@@ -698,8 +698,8 @@ export async function mountPlanner(container, navigate) {
           <!-- 1-Tap Sleep Location Selector -->
           <div class="sleep-location-selector" role="radiogroup" aria-label="Sleep location for ${day.shortName}">
             ${Object.values(SLEEP_LOCATIONS).map(loc => {
-              const isSelected = sleep.locationKey === loc.key;
-              return `
+      const isSelected = sleep.locationKey === loc.key;
+      return `
                 <button 
                   type="button"
                   class="sleep-loc-pill ${isSelected ? 'selected' : ''}" 
@@ -708,10 +708,10 @@ export async function mountPlanner(container, navigate) {
                   title="${loc.label} (${loc.partner})"
                 >
                   <span class="loc-icon">${loc.icon}</span>
-                  <span class="loc-text">${loc.label.split(' ')[0]}</span>
+                  <span class="loc-text">${loc.short || loc.label.split(' ')[0]}</span>
                 </button>
               `;
-            }).join('')}
+    }).join('')}
           </div>
 
           <!-- Bedtime & Morning Wake-Up Alarms -->
@@ -924,7 +924,7 @@ export async function mountPlanner(container, navigate) {
                   <input type="radio" name="event-owner" value="me" />
                   <span class="owner-radio-card">
                     <span class="radio-dot dot-green"></span>
-                    <span>Andino (Me)</span>
+                    <span>Andino</span>
                   </span>
                 </label>
 
@@ -932,7 +932,7 @@ export async function mountPlanner(container, navigate) {
                   <input type="radio" name="event-owner" value="her" />
                   <span class="owner-radio-card">
                     <span class="radio-dot dot-blue"></span>
-                    <span>Núria (Her)</span>
+                    <span>Núria</span>
                   </span>
                 </label>
               </div>
@@ -1031,11 +1031,11 @@ export async function mountPlanner(container, navigate) {
 
           <div class="modal-body defaults-table-body">
             ${WEEKDAYS.map(w => {
-              const def = sleepDefaults.find(d => Number(d.day_of_week) === w.iso) || DEFAULT_SLEEP_TEMPLATE[w.iso - 1];
-              const loc = def.sleep_location || 'my_place';
-              const hasSep = Boolean(def.my_wake_time || def.her_wake_time);
+      const def = sleepDefaults.find(d => Number(d.day_of_week) === w.iso) || DEFAULT_SLEEP_TEMPLATE[w.iso - 1];
+      const loc = def.sleep_location || 'my_place';
+      const hasSep = Boolean(def.my_wake_time || def.her_wake_time);
 
-              return `
+      return `
                 <div class="defaults-day-row" data-weekday="${w.iso}">
                   <div class="defaults-day-label">
                     <span class="day-full">${w.full}</span>
@@ -1043,8 +1043,8 @@ export async function mountPlanner(container, navigate) {
 
                   <div class="defaults-location-select">
                     <select class="form-select select-def-loc" data-day="${w.iso}">
-                      <option value="my_place" ${loc === 'my_place' ? 'selected' : ''}>🏠 My Place</option>
-                      <option value="her_place" ${loc === 'her_place' ? 'selected' : ''}>🏡 Her Place</option>
+                      <option value="my_place" ${loc === 'my_place' ? 'selected' : ''}>🏠 Andi's Place</option>
+                      <option value="her_place" ${loc === 'her_place' ? 'selected' : ''}>🏡 Núria's Place</option>
                       <option value="apart" ${loc === 'apart' ? 'selected' : ''}>↔️ Apart</option>
                       <option value="away" ${loc === 'away' ? 'selected' : ''}>✈️ Away / Trip</option>
                     </select>
@@ -1080,7 +1080,7 @@ export async function mountPlanner(container, navigate) {
                   </div>
                 </div>
               `;
-            }).join('')}
+    }).join('')}
           </div>
 
           <div class="modal-footer">
@@ -2044,7 +2044,7 @@ export async function mountPlanner(container, navigate) {
     const dateObj = parseDateISO(date);
     const plan = resolveDaySleepPlan(date, dayPlans, sleepDefaults);
 
-    const partnerLabel = partner === 'me' ? 'Andi (Me)' : 'Núria (Her)';
+    const partnerLabel = partner === 'me' ? 'Andi' : 'Núria';
     const title = document.getElementById('status-dialog-title');
     if (title) title.textContent = `${partnerLabel}'s Heads-Up Note`;
 
@@ -2110,5 +2110,5 @@ export async function mountPlanner(container, navigate) {
   render();
 
   // Return unmount cleanup if needed
-  return () => {};
+  return () => { };
 }

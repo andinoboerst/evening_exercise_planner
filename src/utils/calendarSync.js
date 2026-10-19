@@ -4,18 +4,18 @@
  */
 
 export const SLEEP_LOCATIONS = {
-  my_place: { key: 'my_place', label: 'My Place', icon: '🏠', partner: 'Andino', badge: '🏠 My Place' },
-  her_place: { key: 'her_place', label: 'Her Place', icon: '🏡', partner: 'Núria', badge: '🏡 Her Place' },
-  apart: { key: 'apart', label: 'Apart', icon: '↔️', partner: 'Respective Homes', badge: '↔️ Apart' },
-  away: { key: 'away', label: 'Away / Trip', icon: '✈️', partner: 'Traveling', badge: '✈️ Away / Trip' }
+  my_place: { key: 'my_place', label: "Andi's Place", short: 'Andi', icon: '🏠', partner: 'Andino', badge: "🏠 Andi's Place" },
+  her_place: { key: 'her_place', label: "Núria's Place", short: 'Núria', icon: '🏡', partner: 'Núria', badge: "🏡 Núria's Place" },
+  apart: { key: 'apart', label: 'Apart', short: 'Apart', icon: '↔️', partner: 'Respective Homes', badge: '↔️ Apart' },
+  away: { key: 'away', label: 'Away / Trip', short: 'Away', icon: '✈️', partner: 'Traveling', badge: '✈️ Away / Trip' }
 };
 
 export const OWNER_TYPES = {
   me: {
     key: 'me',
-    label: 'Me',
-    tag: 'Me',
-    prefix: '[Me]',
+    label: 'Andi',
+    tag: 'An',
+    prefix: '[An]',
     color: '#15803D',
     bg: '#DCFCE7',
     border: '#15803D',
@@ -24,9 +24,9 @@ export const OWNER_TYPES = {
   },
   her: {
     key: 'her',
-    label: 'Her',
-    tag: 'Her',
-    prefix: '[Her]',
+    label: 'Núria',
+    tag: 'Nú',
+    prefix: '[Nú]',
     color: '#1D4ED8',
     bg: '#DBEAFE',
     border: '#1D4ED8',
