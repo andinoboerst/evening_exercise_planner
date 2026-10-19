@@ -152,27 +152,268 @@ export async function mountMeals(container, navigate) {
   // Helpers
   // ---------------------------------------------------------------------------
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const normName = (s) => String(s || '').toLowerCase().trim();
-  const useDb = () => Boolean(isSupabaseConfigured && household?.id && activePlan?.id);
-  const useDbBasic = () => Boolean(isSupabaseConfigured && household?.id);
+  const isMockPreview = typeof window !== 'undefined' && Boolean(localStorage.getItem('andinu_mock_user'));
+  const useDb = () => Boolean(isSupabaseConfigured && household?.id && activePlan?.id && !isMockPreview);
+  const useDbBasic = () => Boolean(isSupabaseConfigured && household?.id && !isMockPreview);
+
+  // ---------------------------------------------------------------------------
+  // Canonical Unit & Ingredient Normalization System
+  // ---------------------------------------------------------------------------
+  const UNIT_MAP = {
+    // Weight (base: grams)
+    g: { canonical: 'g', type: 'weight', toBase: 1 },
+    gram: { canonical: 'g', type: 'weight', toBase: 1 },
+    grams: { canonical: 'g', type: 'weight', toBase: 1 },
+    gr: { canonical: 'g', type: 'weight', toBase: 1 },
+    kg: { canonical: 'kg', type: 'weight', toBase: 1000 },
+    kilo: { canonical: 'kg', type: 'weight', toBase: 1000 },
+    kilos: { canonical: 'kg', type: 'weight', toBase: 1000 },
+    kilogram: { canonical: 'kg', type: 'weight', toBase: 1000 },
+    kilograms: { canonical: 'kg', type: 'weight', toBase: 1000 },
+    oz: { canonical: 'oz', type: 'weight', toBase: 28.35 },
+    ounce: { canonical: 'oz', type: 'weight', toBase: 28.35 },
+    ounces: { canonical: 'oz', type: 'weight', toBase: 28.35 },
+    lb: { canonical: 'lb', type: 'weight', toBase: 453.59 },
+    lbs: { canonical: 'lb', type: 'weight', toBase: 453.59 },
+    pound: { canonical: 'lb', type: 'weight', toBase: 453.59 },
+    pounds: { canonical: 'lb', type: 'weight', toBase: 453.59 },
+
+    // Volume (base: ml)
+    ml: { canonical: 'ml', type: 'volume', toBase: 1 },
+    mls: { canonical: 'ml', type: 'volume', toBase: 1 },
+    milliliter: { canonical: 'ml', type: 'volume', toBase: 1 },
+    milliliters: { canonical: 'ml', type: 'volume', toBase: 1 },
+    millilitre: { canonical: 'ml', type: 'volume', toBase: 1 },
+    millilitres: { canonical: 'ml', type: 'volume', toBase: 1 },
+    l: { canonical: 'l', type: 'volume', toBase: 1000 },
+    liter: { canonical: 'l', type: 'volume', toBase: 1000 },
+    liters: { canonical: 'l', type: 'volume', toBase: 1000 },
+    litre: { canonical: 'l', type: 'volume', toBase: 1000 },
+    litres: { canonical: 'l', type: 'volume', toBase: 1000 },
+    tbsp: { canonical: 'tbsp', type: 'volume', toBase: 15 },
+    tablespoon: { canonical: 'tbsp', type: 'volume', toBase: 15 },
+    tablespoons: { canonical: 'tbsp', type: 'volume', toBase: 15 },
+    tbs: { canonical: 'tbsp', type: 'volume', toBase: 15 },
+    tsp: { canonical: 'tsp', type: 'volume', toBase: 5 },
+    teaspoon: { canonical: 'tsp', type: 'volume', toBase: 5 },
+    teaspoons: { canonical: 'tsp', type: 'volume', toBase: 5 },
+    cup: { canonical: 'cup', type: 'volume', toBase: 240 },
+    cups: { canonical: 'cup', type: 'volume', toBase: 240 },
+
+    // Count / Discrete items
+    clove: { canonical: 'cloves', type: 'count', toBase: 1 },
+    cloves: { canonical: 'cloves', type: 'count', toBase: 1 },
+    can: { canonical: 'cans', type: 'count', toBase: 1 },
+    cans: { canonical: 'cans', type: 'count', toBase: 1 },
+    slice: { canonical: 'slices', type: 'count', toBase: 1 },
+    slices: { canonical: 'slices', type: 'count', toBase: 1 },
+    piece: { canonical: 'pieces', type: 'count', toBase: 1 },
+    pieces: { canonical: 'pieces', type: 'count', toBase: 1 },
+    pc: { canonical: 'pieces', type: 'count', toBase: 1 },
+    pcs: { canonical: 'pieces', type: 'count', toBase: 1 },
+    pack: { canonical: 'packs', type: 'count', toBase: 1 },
+    packs: { canonical: 'packs', type: 'count', toBase: 1 },
+    package: { canonical: 'packs', type: 'count', toBase: 1 },
+    packages: { canonical: 'packs', type: 'count', toBase: 1 },
+    packet: { canonical: 'packs', type: 'count', toBase: 1 },
+    packets: { canonical: 'packs', type: 'count', toBase: 1 },
+    bunch: { canonical: 'bunches', type: 'count', toBase: 1 },
+    bunches: { canonical: 'bunches', type: 'count', toBase: 1 },
+    bottle: { canonical: 'bottles', type: 'count', toBase: 1 },
+    bottles: { canonical: 'bottles', type: 'count', toBase: 1 },
+    jar: { canonical: 'jars', type: 'count', toBase: 1 },
+    jars: { canonical: 'jars', type: 'count', toBase: 1 },
+    pot: { canonical: 'pots', type: 'count', toBase: 1 },
+    pots: { canonical: 'pots', type: 'count', toBase: 1 },
+    pinch: { canonical: 'pinches', type: 'count', toBase: 1 },
+    pinches: { canonical: 'pinches', type: 'count', toBase: 1 },
+    handful: { canonical: 'handfuls', type: 'count', toBase: 1 },
+    handfuls: { canonical: 'handfuls', type: 'count', toBase: 1 },
+    stalk: { canonical: 'stalks', type: 'count', toBase: 1 },
+    stalks: { canonical: 'stalks', type: 'count', toBase: 1 },
+    head: { canonical: 'heads', type: 'count', toBase: 1 },
+    heads: { canonical: 'heads', type: 'count', toBase: 1 },
+    whole: { canonical: 'whole', type: 'count', toBase: 1 }
+  };
+
+  function normalizeUnit(rawUnit) {
+    if (!rawUnit) return { canonical: '', type: 'none', toBase: 1 };
+    const cleaned = String(rawUnit).trim().toLowerCase().replace(/\.$/, '');
+    if (UNIT_MAP[cleaned]) return UNIT_MAP[cleaned];
+    return { canonical: cleaned, type: 'custom', toBase: 1 };
+  }
+
+  function canonicalIngredientName(name) {
+    let s = String(name || '').toLowerCase().trim();
+    if (!s) return '';
+    // Strip leading dashes, bullets, and parenthetical descriptors
+    s = s.replace(/^[-\s*•]+/, '').replace(/[(][^)]*[)]/g, '').trim();
+    // Synonym mapping
+    if (/^(minced beef|beef mince|ground beef)$/.test(s)) return 'minced beef';
+    if (/^(minced pork|pork mince|ground pork)$/.test(s)) return 'minced pork';
+    if (/^(minced chicken|chicken mince|ground chicken)$/.test(s)) return 'minced chicken';
+    if (/^(minced turkey|turkey mince|ground turkey)$/.test(s)) return 'minced turkey';
+    // Singularization
+    if (s.endsWith('ies')) s = s.slice(0, -3) + 'y';
+    else if (s.endsWith('oes')) s = s.slice(0, -2);
+    else if (s.endsWith('ses')) s = s.slice(0, -2);
+    else if (s.endsWith('s') && !s.endsWith('ss') && s.length > 3) s = s.slice(0, -1);
+    return s;
+  }
+
+  const normName = (s) => canonicalIngredientName(s);
 
   function formatQty(n) {
     if (typeof n !== 'number' || isNaN(n)) return '';
     return String(Math.round(n * 100) / 100);
   }
 
+  function parseFractionOrDecimal(str) {
+    if (!str) return 1;
+    const s = String(str).trim().replace(',', '.');
+    if (s.includes(' ')) {
+      const [whole, frac] = s.split(/\s+/);
+      return parseFloat(whole) + parseFractionOrDecimal(frac);
+    }
+    if (s.includes('/')) {
+      const [num, den] = s.split('/').map(Number);
+      return den ? num / den : 1;
+    }
+    const n = parseFloat(s);
+    return isNaN(n) ? 1 : n;
+  }
+
   function parseAmount(text) {
-    const m = String(text || '').trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+    const s = String(text || '').trim();
+    if (!s) return { quantity: 1, unit: '' };
+    const parsed = smartParseLine(s);
+    if (parsed) return { quantity: parsed.quantity, unit: parsed.unit };
+    const m = s.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
     if (m) return { quantity: parseFloat(m[1].replace(',', '.')), unit: m[2] || '' };
-    return { quantity: 1, unit: String(text || '').trim() };
+    return { quantity: 1, unit: s };
   }
 
   function amountLabel(item) {
     const qty = item.quantity;
     const unit = item.unit || '';
-    if (/^\d/.test(unit)) return unit;
-    if (qty == null || qty === '') return unit;
+    if (qty == null || qty === '' || isNaN(Number(qty))) return unit;
     return `${formatQty(Number(qty))} ${unit}`.trim();
+  }
+
+  // Pre-compiled list of known unit tokens sorted descending by length to prevent partial matches
+  const KNOWN_UNITS = Object.keys(UNIT_MAP).sort((a, b) => b.length - a.length).join('|');
+
+  function smartParseLine(line) {
+    const trimmed = String(line || '').trim();
+    if (!trimmed) return null;
+
+    // 1. Quantity & Unit at start: "300g minced beef" or "400 grams minced beef" or "2 cans of tomatoes"
+    const mStart = trimmed.match(new RegExp(`^([\\d]+(?:[.,][\\d]+)?|[\\d]+/[\\d]+|[\\d]+\\s+[\\d]+/[\\d]+)\\s*(${KNOWN_UNITS})?\\s*(?:of\\s+)?(.+)$`, 'i'));
+    if (mStart) {
+      const rawQty = parseFractionOrDecimal(mStart[1]);
+      const rawUnit = mStart[2] || '';
+      const rawName = mStart[3].trim();
+      const uInfo = normalizeUnit(rawUnit);
+      return {
+        ingredient_name: rawName,
+        normalized_name: canonicalIngredientName(rawName),
+        quantity: rawQty,
+        unit: uInfo.canonical,
+        category: 'Other'
+      };
+    }
+
+    // 2. Quantity & Unit at end: "Minced beef 300g" or "Minced beef, 400 g" or "Tomatoes (2 cans)"
+    const mEnd = trimmed.match(new RegExp(`^(.+?)[,\\s\\(]+([\\d]+(?:[.,][\\d]+)?|[\\d]+/[\\d]+)\\s*(${KNOWN_UNITS})?\\s*\\)?$`, 'i'));
+    if (mEnd) {
+      const rawName = mEnd[1].trim();
+      const rawQty = parseFractionOrDecimal(mEnd[2]);
+      const rawUnit = mEnd[3] || '';
+      const uInfo = normalizeUnit(rawUnit);
+      return {
+        ingredient_name: rawName,
+        normalized_name: canonicalIngredientName(rawName),
+        quantity: rawQty,
+        unit: uInfo.canonical,
+        category: 'Other'
+      };
+    }
+
+    // Fallback: 1 whole item
+    return {
+      ingredient_name: trimmed,
+      normalized_name: canonicalIngredientName(trimmed),
+      quantity: 1,
+      unit: '',
+      category: 'Other'
+    };
+  }
+
+  // Smart additive aggregation of ingredients across multiple meals
+  function aggregateIngredients(items) {
+    const groups = new Map();
+
+    for (const item of items) {
+      const norm = canonicalIngredientName(item.normalized_name || item.ingredient_name);
+      if (!norm) continue;
+      const uInfo = normalizeUnit(item.unit);
+      const qty = (typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity) || 1);
+
+      // Grouping key: for convertible units (weight, volume), group by (norm, unitType). For others, group by (norm, canonicalUnit).
+      const isConvertible = (uInfo.type === 'weight' || uInfo.type === 'volume');
+      const groupKey = isConvertible ? `${norm}|${uInfo.type}` : `${norm}|${uInfo.canonical}`;
+      const baseAmount = qty * uInfo.toBase;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          ingredient_name: item.ingredient_name,
+          normalized_name: norm,
+          baseAmount,
+          uInfo,
+          category: item.category || 'Groceries'
+        });
+      } else {
+        const g = groups.get(groupKey);
+        g.baseAmount += baseAmount;
+        if (uInfo.canonical === 'g' || uInfo.canonical === 'ml') {
+          g.uInfo = uInfo;
+        }
+      }
+    }
+
+    return Array.from(groups.values()).map(g => {
+      let finalQty = g.baseAmount;
+      let finalUnit = g.uInfo.canonical;
+
+      if (g.uInfo.type === 'weight') {
+        if (finalQty >= 1000 && finalQty % 100 === 0) {
+          finalQty = finalQty / 1000;
+          finalUnit = 'kg';
+        } else {
+          finalUnit = 'g';
+        }
+      } else if (g.uInfo.type === 'volume') {
+        if (finalQty >= 1000 && finalQty % 100 === 0) {
+          finalQty = finalQty / 1000;
+          finalUnit = 'l';
+        } else if (g.uInfo.canonical === 'tbsp' || g.uInfo.canonical === 'tsp') {
+          finalQty = Math.round((finalQty / g.uInfo.toBase) * 10) / 10;
+          finalUnit = g.uInfo.canonical;
+        } else {
+          finalUnit = 'ml';
+        }
+      } else if (g.uInfo.toBase > 1) {
+        finalQty = Math.round((finalQty / g.uInfo.toBase) * 10) / 10;
+      }
+
+      return {
+        ingredient_name: g.ingredient_name,
+        normalized_name: g.normalized_name,
+        quantity: Math.round(finalQty * 100) / 100,
+        unit: finalUnit,
+        category: g.category
+      };
+    });
   }
 
   const recipeOf = (entry) => entry ? (recipes.find(r => r.id === entry.recipe_id) || entry.recipes || null) : null;
@@ -192,7 +433,7 @@ export async function mountMeals(container, navigate) {
   const getEntry = (d, s) => planDays.find(p => p.meal_date === d && p.slot_type === s);
   const nextDay = (d) => addDays(d, 1);
   const isLinked = (entry) => Boolean(entry?.source_meal_prep_id);
-  const isInPantry = (norm) => pantryItems.some(p => normName(p.normalized_name || p.ingredient_name) === norm);
+  const isInPantry = (norm) => pantryItems.some(p => canonicalIngredientName(p.normalized_name || p.ingredient_name) === canonicalIngredientName(norm));
 
   // Staples (oils, spices, condiments, baking basics...) are bought in bulk and their use per
   // dish is unknown, so they are NEVER removed automatically. Users can override per item.
@@ -266,7 +507,7 @@ export async function mountMeals(container, navigate) {
 
   async function loadAllData() {
     let dbLoaded = false;
-    if (isSupabaseConfigured && household?.id) {
+    if (isSupabaseConfigured && household?.id && !isMockPreview) {
       try {
         // 1. Recipes
         const { data: recs, error: recsErr } = await supabase
@@ -382,7 +623,7 @@ export async function mountMeals(container, navigate) {
     if (!activePlan) {
       const cachedDays = localStorage.getItem(STORAGE_PLAN_DAYS_KEY);
       planDays = cachedDays ? JSON.parse(cachedDays) : [];
-      if (!isSupabaseConfigured || !household?.id) {
+      if (!isSupabaseConfigured || !household?.id || isMockPreview) {
         const cachedShop = localStorage.getItem(STORAGE_SHOPPING_KEY);
         if (cachedShop) shoppingItems = JSON.parse(cachedShop);
       }
@@ -576,7 +817,7 @@ export async function mountMeals(container, navigate) {
   // Shopping list generation
   // ---------------------------------------------------------------------------
   function computeWeeklyNeeds() {
-    const totals = new Map();
+    const rawItems = [];
     const dates = new Set(windowDates());
     planDays.forEach(entry => {
       if (!dates.has(entry.meal_date)) return; // only the upcoming 7 days
@@ -585,16 +826,17 @@ export async function mountMeals(container, navigate) {
       const mult = entry.servings_multiplier != null ? Number(entry.servings_multiplier) : 1;
       if (mult <= 0) return; // linked meal-prep lunch: already counted in 2x dinner
       (rec.recipe_ingredients || []).forEach(ing => {
-        const norm = normName(ing.normalized_name || ing.ingredient_name);
-        if (!norm) return;
-        const unit = ing.unit || '';
-        const key = `${norm}|${unit}`;
         const qty = (typeof ing.quantity === 'number' ? ing.quantity : parseFloat(ing.quantity) || 1) * mult;
-        if (totals.has(key)) totals.get(key).quantity += qty;
-        else totals.set(key, { ingredient_name: ing.ingredient_name, normalized_name: norm, quantity: qty, unit, category: ing.category || 'Groceries' });
+        rawItems.push({
+          ingredient_name: ing.ingredient_name,
+          normalized_name: ing.normalized_name || ing.ingredient_name,
+          quantity: qty,
+          unit: ing.unit || '',
+          category: ing.category || 'Groceries'
+        });
       });
     });
-    return Array.from(totals.values());
+    return aggregateIngredients(rawItems);
   }
 
   async function generateShoppingList() {
@@ -604,18 +846,19 @@ export async function mountMeals(container, navigate) {
       return false;
     }
     const planKey = activePlan?.id || LOCAL_PLAN_ID;
-    const manualUnchecked = new Set(
-      shoppingItems.filter(s => !s.is_checked && s.meal_plan_id !== planKey).map(s => normName(s.normalized_name || s.ingredient_name))
-    );
+    
+    // Existing manual / non-plan shopping items to preserve
+    const manualUnchecked = shoppingItems.filter(s => !s.is_checked && s.meal_plan_id && s.meal_plan_id !== planKey);
+    const manualNorms = new Set(manualUnchecked.map(s => canonicalIngredientName(s.normalized_name || s.ingredient_name)));
 
     // Drop previously generated, not-yet-bought items so regenerating stays accurate
-    const stale = shoppingItems.filter(s => !s.is_checked && s.meal_plan_id === planKey);
+    const stale = shoppingItems.filter(s => !s.is_checked && (s.meal_plan_id === planKey || !s.meal_plan_id));
     shoppingItems = shoppingItems.filter(s => !stale.includes(s));
     if (stale.length && useDbBasic()) {
       await supabase.from('meal_shopping_items').delete().in('id', stale.map(s => s.id));
     }
 
-    const needed = computeWeeklyNeeds().filter(n => !isInPantry(n.normalized_name) && !manualUnchecked.has(n.normalized_name));
+    const needed = computeWeeklyNeeds().filter(n => !isInPantry(n.normalized_name) && !manualNorms.has(n.normalized_name));
 
     const payload = needed.map(n => ({
       id: generateUUID(),
@@ -633,10 +876,12 @@ export async function mountMeals(container, navigate) {
       const dbPayload = payload.map(p => ({ ...p, meal_plan_id: activePlan?.id || null }));
       const { data, error } = await supabase.from('meal_shopping_items').insert(dbPayload).select();
       if (error) {
-        toast(`Failed to build list: ${error.message}`);
-        return false;
+        console.warn('Supabase shopping insert failed, saving locally:', error);
+        shoppingItems = [...payload, ...shoppingItems];
+        localStorage.setItem(STORAGE_SHOPPING_KEY, JSON.stringify(shoppingItems));
+      } else {
+        shoppingItems = [...(data || []), ...shoppingItems];
       }
-      shoppingItems = [...(data || []), ...shoppingItems];
     } else if (payload.length) {
       shoppingItems = [...payload, ...shoppingItems];
     }
@@ -938,9 +1183,10 @@ export async function mountMeals(container, navigate) {
         </div>
 
         <form id="form-add-shopping-item" class="add-item-card glass-panel" style="margin-bottom: 16px;">
-          <div class="add-item-row">
-            <input type="text" id="input-shop-item-name" class="text-input" placeholder="Add extra grocery item (e.g. Greek yogurt)..." required />
-            <input type="text" id="input-shop-item-qty" class="text-input" style="max-width: 120px;" placeholder="Qty (e.g. 500g)" />
+          <div class="add-item-row" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="input-shop-item-name" class="text-input" style="flex: 2; min-width: 140px;" placeholder="Add grocery item (e.g. Minced beef)..." required />
+            <input type="number" step="any" min="0" id="input-shop-item-qty" class="text-input" style="width: 85px;" placeholder="Qty" />
+            <input type="text" id="input-shop-item-unit" class="text-input" style="width: 85px;" placeholder="Unit" list="common-units-list" />
             <button type="submit" class="btn-primary-start" style="width: auto; padding: 0 16px;">Add</button>
           </div>
         </form>
@@ -969,9 +1215,10 @@ export async function mountMeals(container, navigate) {
     return `
       <div class="pantry-view">
         <form id="form-add-pantry" class="add-item-card glass-panel" style="margin-bottom: 20px;">
-          <div class="add-item-row">
-            <input type="text" id="input-pantry-name" class="text-input" placeholder="Something you have at home (e.g. jasmine rice)..." required />
-            <input type="text" id="input-pantry-qty" class="text-input" style="max-width: 130px;" placeholder="Qty (optional)" />
+          <div class="add-item-row" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="input-pantry-name" class="text-input" style="flex: 2; min-width: 140px;" placeholder="Something you have (e.g. Jasmine rice)..." required />
+            <input type="number" step="any" min="0" id="input-pantry-qty" class="text-input" style="width: 85px;" placeholder="Qty" />
+            <input type="text" id="input-pantry-unit" class="text-input" style="width: 85px;" placeholder="Unit" list="common-units-list" />
             <button type="submit" class="btn-primary-start" style="width: auto; padding: 0 16px;">Add to Pantry</button>
           </div>
         </form>
@@ -1047,6 +1294,22 @@ export async function mountMeals(container, navigate) {
             <button class="mp-sheet-close" data-action="close-sheet" aria-label="Close">&times;</button>
           </div>
           <form id="form-create-recipe" class="mp-sheet-body">
+            <datalist id="common-units-list">
+              <option value="g">Grams (g)</option>
+              <option value="kg">Kilograms (kg)</option>
+              <option value="ml">Milliliters (ml)</option>
+              <option value="l">Liters (l)</option>
+              <option value="tbsp">Tablespoons (tbsp)</option>
+              <option value="tsp">Teaspoons (tsp)</option>
+              <option value="cups">Cups</option>
+              <option value="cloves">Cloves</option>
+              <option value="cans">Cans</option>
+              <option value="slices">Slices</option>
+              <option value="pieces">Pieces</option>
+              <option value="packs">Packs</option>
+              <option value="whole">Whole</option>
+            </datalist>
+
             <div class="form-group"><label>Recipe Title</label>
               <input type="text" id="recipe-in-title" class="text-input" placeholder="e.g. Creamy Tuscan Garlic Gnocchi" required /></div>
             <div style="display: flex; gap: 12px; margin-top: 12px;">
@@ -1057,8 +1320,50 @@ export async function mountMeals(container, navigate) {
             </div>
             <div class="form-group" style="margin-top: 12px;"><label>Description</label>
               <input type="text" id="recipe-in-desc" class="text-input" placeholder="Short description of the dish" /></div>
-            <div class="form-group" style="margin-top: 12px;"><label>Ingredients (one per line, e.g. "250 g spaghetti")</label>
-              <textarea id="recipe-in-ingredients" class="text-input" rows="4" placeholder="250 g spaghetti&#10;4 cloves garlic&#10;2 tbsp olive oil" required></textarea></div>
+
+            <div class="form-group" style="margin-top: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                <label style="font-weight: 600; color: #1C1917; margin-bottom: 0;">Ingredients (Quantity, Unit &amp; Name)</label>
+                <button type="button" class="btn-text-action" data-action="toggle-bulk-ings" style="background: none; border: none; color: var(--app-primary, #2D5A43); font-size: 0.82rem; cursor: pointer; text-decoration: underline;">
+                  📋 Paste text instead
+                </button>
+              </div>
+
+              <div id="recipe-ings-structured-wrap">
+                <div id="recipe-ings-rows" style="display: flex; flex-direction: column; gap: 8px;">
+                  <div class="recipe-ing-row" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="number" step="any" min="0" class="text-input ing-row-qty" style="width: 85px; flex-shrink: 0;" placeholder="300" />
+                    <input type="text" class="text-input ing-row-unit" style="width: 95px; flex-shrink: 0;" placeholder="g" list="common-units-list" />
+                    <input type="text" class="text-input ing-row-name" style="flex: 1; min-width: 0;" placeholder="Ingredient name (e.g. Minced beef)" required />
+                    <button type="button" class="btn-item-delete" data-action="remove-recipe-ing-row" title="Remove ingredient">✕</button>
+                  </div>
+                  <div class="recipe-ing-row" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="number" step="any" min="0" class="text-input ing-row-qty" style="width: 85px; flex-shrink: 0;" placeholder="4" />
+                    <input type="text" class="text-input ing-row-unit" style="width: 95px; flex-shrink: 0;" placeholder="cloves" list="common-units-list" />
+                    <input type="text" class="text-input ing-row-name" style="flex: 1; min-width: 0;" placeholder="Garlic" />
+                    <button type="button" class="btn-item-delete" data-action="remove-recipe-ing-row" title="Remove ingredient">✕</button>
+                  </div>
+                  <div class="recipe-ing-row" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="number" step="any" min="0" class="text-input ing-row-qty" style="width: 85px; flex-shrink: 0;" placeholder="2" />
+                    <input type="text" class="text-input ing-row-unit" style="width: 95px; flex-shrink: 0;" placeholder="tbsp" list="common-units-list" />
+                    <input type="text" class="text-input ing-row-name" style="flex: 1; min-width: 0;" placeholder="Olive oil" />
+                    <button type="button" class="btn-item-delete" data-action="remove-recipe-ing-row" title="Remove ingredient">✕</button>
+                  </div>
+                </div>
+                <button type="button" class="btn-secondary" data-action="add-recipe-ing-row" style="margin-top: 10px; width: 100%; font-size: 0.84rem; padding: 7px 12px; border-style: dashed;">
+                  + Add Another Ingredient Row
+                </button>
+              </div>
+
+              <div id="recipe-ings-bulk-wrap" style="display: none; margin-top: 8px;">
+                <p style="font-size: 0.8rem; color: #666059; margin-bottom: 6px;">Paste ingredients with amounts (e.g. <em>300g minced beef</em> or <em>2 cans tomatoes</em>). They will automatically be parsed into separate quantity and unit fields.</p>
+                <textarea id="recipe-in-ingredients-bulk" class="text-input" rows="5" placeholder="300g minced beef&#10;4 cloves garlic&#10;2 tbsp olive oil"></textarea>
+                <button type="button" class="btn-secondary" data-action="parse-bulk-ings" style="margin-top: 6px; font-size: 0.82rem; padding: 6px 14px;">
+                  ✨ Fill into Structured Rows
+                </button>
+              </div>
+            </div>
+
             <div class="form-group" style="margin-top: 12px;"><label>Cooking Instructions</label>
               <textarea id="recipe-in-instructions" class="text-input" rows="4" placeholder="One step per line..."></textarea></div>
             <button type="submit" class="mp-primary-btn" style="margin-top: 18px; width: 100%;">Save Recipe</button>
@@ -1223,6 +1528,87 @@ export async function mountMeals(container, navigate) {
           scrollSafeRender();
           break;
         }
+        case 'add-recipe-ing-row': {
+          const list = shell.querySelector('#recipe-ings-rows');
+          if (list) {
+            const row = document.createElement('div');
+            row.className = 'recipe-ing-row';
+            row.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+            row.innerHTML = `
+              <input type="number" step="any" min="0" class="text-input ing-row-qty" style="width: 85px; flex-shrink: 0;" placeholder="300" />
+              <input type="text" class="text-input ing-row-unit" style="width: 95px; flex-shrink: 0;" placeholder="g" list="common-units-list" />
+              <input type="text" class="text-input ing-row-name" style="flex: 1; min-width: 0;" placeholder="Ingredient name (e.g. Minced beef)" required />
+              <button type="button" class="btn-item-delete" data-action="remove-recipe-ing-row" title="Remove ingredient">✕</button>
+            `;
+            list.appendChild(row);
+            row.querySelector('.ing-row-qty')?.focus();
+          }
+          break;
+        }
+        case 'remove-recipe-ing-row': {
+          const row = el.closest('.recipe-ing-row');
+          const list = shell.querySelector('#recipe-ings-rows');
+          if (row) {
+            row.remove();
+            if (list && list.children.length === 0) {
+              const blank = document.createElement('div');
+              blank.className = 'recipe-ing-row';
+              blank.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+              blank.innerHTML = `
+                <input type="number" step="any" min="0" class="text-input ing-row-qty" style="width: 85px; flex-shrink: 0;" placeholder="300" />
+                <input type="text" class="text-input ing-row-unit" style="width: 95px; flex-shrink: 0;" placeholder="g" list="common-units-list" />
+                <input type="text" class="text-input ing-row-name" style="flex: 1; min-width: 0;" placeholder="Ingredient name (e.g. Minced beef)" required />
+                <button type="button" class="btn-item-delete" data-action="remove-recipe-ing-row" title="Remove ingredient">✕</button>
+              `;
+              list.appendChild(blank);
+            }
+          }
+          break;
+        }
+        case 'toggle-bulk-ings': {
+          const bulkWrap = shell.querySelector('#recipe-ings-bulk-wrap');
+          const structWrap = shell.querySelector('#recipe-ings-structured-wrap');
+          if (bulkWrap && structWrap) {
+            const isBulk = bulkWrap.style.display !== 'none';
+            bulkWrap.style.display = isBulk ? 'none' : 'block';
+            structWrap.style.display = isBulk ? 'block' : 'none';
+            el.textContent = isBulk ? '📋 Paste text instead' : '🔢 Use separate fields';
+          }
+          break;
+        }
+        case 'parse-bulk-ings': {
+          const bulkText = shell.querySelector('#recipe-in-ingredients-bulk')?.value || '';
+          const lines = bulkText.split('\n').map(l => l.trim()).filter(Boolean);
+          if (!lines.length) { toast('Please enter some ingredient lines first.'); break; }
+          const list = shell.querySelector('#recipe-ings-rows');
+          if (list) {
+            list.innerHTML = '';
+            lines.forEach(line => {
+              const parsed = smartParseLine(line);
+              if (!parsed) return;
+              const row = document.createElement('div');
+              row.className = 'recipe-ing-row';
+              row.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+              row.innerHTML = `
+                <input type="number" step="any" min="0" class="text-input ing-row-qty" style="width: 85px; flex-shrink: 0;" placeholder="300" value="${parsed.quantity || ''}" />
+                <input type="text" class="text-input ing-row-unit" style="width: 95px; flex-shrink: 0;" placeholder="g" list="common-units-list" value="${esc(parsed.unit || '')}" />
+                <input type="text" class="text-input ing-row-name" style="flex: 1; min-width: 0;" placeholder="Ingredient name (e.g. Minced beef)" value="${esc(parsed.ingredient_name || '')}" required />
+                <button type="button" class="btn-item-delete" data-action="remove-recipe-ing-row" title="Remove ingredient">✕</button>
+              `;
+              list.appendChild(row);
+            });
+            const bulkWrap = shell.querySelector('#recipe-ings-bulk-wrap');
+            const structWrap = shell.querySelector('#recipe-ings-structured-wrap');
+            const toggleBtn = shell.querySelector('[data-action="toggle-bulk-ings"]');
+            if (bulkWrap && structWrap) {
+              bulkWrap.style.display = 'none';
+              structWrap.style.display = 'block';
+              if (toggleBtn) toggleBtn.textContent = '📋 Paste text instead';
+            }
+            toast(`Parsed ${lines.length} ingredient${lines.length > 1 ? 's' : ''} into separate fields!`);
+          }
+          break;
+        }
       }
     });
 
@@ -1277,15 +1663,18 @@ export async function mountMeals(container, navigate) {
 
   async function addShoppingItem() {
     const name = container.querySelector('#input-shop-item-name')?.value?.trim();
-    const amount = parseAmount(container.querySelector('#input-shop-item-qty')?.value);
+    const qtyVal = container.querySelector('#input-shop-item-qty')?.value?.trim();
+    const unitVal = container.querySelector('#input-shop-item-unit')?.value?.trim() || '';
     if (!name) return;
+    const uInfo = normalizeUnit(unitVal);
+    const qty = qtyVal ? parseFloat(qtyVal.replace(',', '.')) : 1;
     const item = {
       id: generateUUID(),
       household_id: household?.id,
       ingredient_name: name,
       normalized_name: normName(name),
-      quantity: amount.quantity,
-      unit: amount.unit,
+      quantity: isNaN(qty) ? 1 : qty,
+      unit: uInfo.canonical || unitVal,
       category: 'Groceries',
       is_checked: false
     };
@@ -1301,16 +1690,19 @@ export async function mountMeals(container, navigate) {
 
   async function addPantryItem() {
     const name = container.querySelector('#input-pantry-name')?.value?.trim();
-    const amount = parseAmount(container.querySelector('#input-pantry-qty')?.value);
+    const qtyVal = container.querySelector('#input-pantry-qty')?.value?.trim();
+    const unitVal = container.querySelector('#input-pantry-unit')?.value?.trim() || '';
     if (!name) return;
     const norm = normName(name);
+    const uInfo = normalizeUnit(unitVal);
+    const qty = qtyVal ? parseFloat(qtyVal.replace(',', '.')) : 1;
     const item = {
       id: generateUUID(),
       household_id: household?.id,
       ingredient_name: name,
       normalized_name: norm,
-      quantity: amount.quantity,
-      unit: amount.unit,
+      quantity: isNaN(qty) ? 1 : qty,
+      unit: uInfo.canonical || unitVal,
       category: 'Pantry'
     };
     if (useDbBasic()) {
@@ -1324,26 +1716,41 @@ export async function mountMeals(container, navigate) {
     scrollSafeRender();
   }
 
-  function parseIngredientLine(line) {
-    const m = line.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|tbsp|tsp|cups?|cloves?|cans?|whole|pinch|handful|slices?)?\s+(?:of\s+)?(.+)$/i);
-    const name = (m ? m[3] : line).trim();
-    return {
-      ingredient_name: name,
-      normalized_name: normName(name),
-      quantity: m ? parseFloat(m[1].replace(',', '.')) : 1,
-      unit: m ? (m[2] || '') : '',
-      category: 'Other'
-    };
-  }
-
   async function createRecipe() {
     const q = (id) => container.querySelector(id)?.value?.trim() || '';
     const title = q('#recipe-in-title');
     if (!title) return;
     const time = parseInt(q('#recipe-in-time') || '25', 10);
     const tags = q('#recipe-in-tags').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-    const parsedIngs = (container.querySelector('#recipe-in-ingredients')?.value || '')
-      .split('\n').map(l => l.trim()).filter(Boolean).map(parseIngredientLine);
+
+    // Collect separate quantity, unit, and name from structured ingredient rows
+    const parsedIngs = [];
+    const rows = container.querySelectorAll('.recipe-ing-row');
+    rows.forEach(row => {
+      const name = row.querySelector('.ing-row-name')?.value?.trim();
+      if (!name) return;
+      const qtyStr = row.querySelector('.ing-row-qty')?.value?.trim();
+      const unit = row.querySelector('.ing-row-unit')?.value?.trim() || '';
+      const uInfo = normalizeUnit(unit);
+      const qty = qtyStr ? parseFloat(qtyStr.replace(',', '.')) : 1;
+      parsedIngs.push({
+        ingredient_name: name,
+        normalized_name: normName(name),
+        quantity: isNaN(qty) ? 1 : qty,
+        unit: uInfo.canonical || unit,
+        category: 'Other'
+      });
+    });
+
+    // Fallback: if structured rows were empty, parse lines from the bulk textarea
+    if (!parsedIngs.length) {
+      const bulkText = container.querySelector('#recipe-in-ingredients-bulk')?.value || '';
+      const lines = bulkText.split('\n').map(l => l.trim()).filter(Boolean);
+      lines.forEach(l => {
+        const item = smartParseLine(l);
+        if (item && item.ingredient_name) parsedIngs.push(item);
+      });
+    }
 
     const base = { id: generateUUID(), title, description: q('#recipe-in-desc'), instructions: container.querySelector('#recipe-in-instructions')?.value?.trim() || '', prep_time_minutes: time, tags };
 
