@@ -7,6 +7,7 @@ import {
   supabase, 
   isSupabaseConfigured 
 } from '../services/supabase.js';
+import { escapeHtml } from '../utils/escapeHtml.js';
 
 export async function mountDashboard(container, navigate) {
   const user = await getCurrentUser();
@@ -315,7 +316,7 @@ export async function mountDashboard(container, navigate) {
                   ${upcomingPlannerEvents.map(e => `
                     <div class="planner-mini-event event-${e.owner_type}">
                       <span class="mini-event-dot"></span>
-                      <span class="mini-event-title">${e.title}</span>
+                      <span class="mini-event-title">${escapeHtml(e.title)}</span>
                       <span class="mini-event-time">${e.timeLabel}</span>
                     </div>
                   `).join('')}
@@ -342,10 +343,10 @@ export async function mountDashboard(container, navigate) {
             ${tonightMeal?.recipes ? `
               <div class="meal-preview-card">
                 <div class="meal-preview-info">
-                  <h4 class="meal-preview-title">${tonightMeal.recipes.title}</h4>
+                  <h4 class="meal-preview-title">${escapeHtml(tonightMeal.recipes.title)}</h4>
                   <div class="meal-preview-meta">
                     <span>⏱️ ${tonightMeal.recipes.prep_time_minutes || 20}m prep</span>
-                    ${tonightMeal.recipes.tags?.length ? `<span>🏷️ ${tonightMeal.recipes.tags.slice(0, 2).join(', ')}</span>` : ''}
+                    ${tonightMeal.recipes.tags?.length ? `<span>🏷️ ${tonightMeal.recipes.tags.slice(0, 2).map(escapeHtml).join(', ')}</span>` : ''}
                   </div>
                 </div>
                 <div class="meal-preview-status ${tonightMeal.is_cooked ? 'status-cooked' : 'status-planned'}">
@@ -377,8 +378,8 @@ export async function mountDashboard(container, navigate) {
                 ${recentListItems.map(item => `
                   <div class="recent-item-row" data-id="${item.id}">
                     <span class="item-cat-icon">${item.list_categories?.icon || '📋'}</span>
-                    <span class="item-title ${item.is_completed ? 'completed' : ''}">${item.title}</span>
-                    <span class="item-cat-badge">${item.list_categories?.name || 'List'}</span>
+                    <span class="item-title ${item.is_completed ? 'completed' : ''}">${escapeHtml(item.title)}</span>
+                    <span class="item-cat-badge">${escapeHtml(item.list_categories?.name || 'List')}</span>
                   </div>
                 `).join('')}
               </div>
@@ -405,7 +406,7 @@ export async function mountDashboard(container, navigate) {
             ${latestQuote ? `
               <div class="dash-quote-preview ${latestQuote.style_variant || 'sticky-yellow'}">
                 <span class="dash-quote-magnet">${latestQuote.magnet_icon || '📌'}</span>
-                <p class="dash-quote-text">“${latestQuote.quote_text}”</p>
+                <p class="dash-quote-text">“${escapeHtml(latestQuote.quote_text)}”</p>
                 <div class="dash-quote-meta">
                   <span class="dash-quote-author">— ${
                     (latestQuote.author_speaker || '').toLowerCase().includes('both') || ((latestQuote.author_speaker || '').toLowerCase().includes('andino') && (latestQuote.author_speaker || '').toLowerCase().includes('nuria'))
@@ -414,9 +415,9 @@ export async function mountDashboard(container, navigate) {
                       ? 'Núria 💗'
                       : (latestQuote.author_speaker || '').toLowerCase().includes('andino') || (latestQuote.author_speaker || '').toLowerCase().includes('andi')
                       ? 'Andino 🧉'
-                      : (latestQuote.author_speaker || 'Núria 💗')
+                      : escapeHtml(latestQuote.author_speaker || 'Núria 💗')
                   }</span>
-                  ${latestQuote.context_or_location ? `<span class="dash-quote-loc">📍 ${latestQuote.context_or_location}</span>` : ''}
+                  ${latestQuote.context_or_location ? `<span class="dash-quote-loc">📍 ${escapeHtml(latestQuote.context_or_location)}</span>` : ''}
                 </div>
               </div>
             ` : `
@@ -457,8 +458,8 @@ export async function mountDashboard(container, navigate) {
               ${members.map(m => `
                 <div class="member-row">
                   <div class="member-info">
-                    <span class="member-email">${m.email}</span>
-                    <span class="member-role">${m.role}</span>
+                    <span class="member-email">${escapeHtml(m.email)}</span>
+                    <span class="member-role">${escapeHtml(m.role)}</span>
                   </div>
                   <span class="member-status-pill ${m.user_id ? 'status-active' : 'status-pending'}">
                     ${m.user_id ? 'Linked' : 'Invite Pending'}

@@ -1,15 +1,18 @@
 // Web Audio API & Speech Synthesis Engine for Nocturne
+const AMBIENT_LEVEL = 0.12;
+
 class AudioEngine {
   constructor() {
     this.ctx = null;
     this.voiceEnabled = true;
     this.soundEffectsEnabled = true;
     this.ambientMode = 'drone'; // 'drone', 'rain', 'silence'
-    this.ambientGain = null;
-    this.ambientSourceNodes = [];
     this.ambientPlaying = false;
     this.masterGain = null;
     this.selectedVoice = null;
+    this.activeSpeech = 0;     // utterances currently queued/speaking (ducking is refcounted)
+    this.onDuck = null;        // (isDucking) => void, lets other players duck with the coach
+    this.ambientSession = null; // { gain, nodes } for the soundscape currently audible
 
     this.initVoices();
   }
@@ -161,18 +164,15 @@ class AudioEngine {
 
   // --- Audio Ducking (lowers background music/ambient during speech) ---
   duck(isDucking) {
-    if (this.ambientGain && this.ctx && this.ambientPlaying) {
+    const session = this.ambientSession;
+    // A fading-out session must not be swelled back up by a late duck(false)
+    if (session && !session.stopping && this.ctx) {
+      const gain = session.gain.gain;
       const now = this.ctx.currentTime;
       try {
-        if (isDucking) {
-          this.ambientGain.gain.cancelScheduledValues(now);
-          this.ambientGain.gain.setValueAtTime(Math.max(0.001, this.ambientGain.gain.value), now);
-          this.ambientGain.gain.exponentialRampToValueAtTime(0.015, now + 0.25);
-        } else {
-          this.ambientGain.gain.cancelScheduledValues(now);
-          this.ambientGain.gain.setValueAtTime(Math.max(0.001, this.ambientGain.gain.value), now);
-          this.ambientGain.gain.exponentialRampToValueAtTime(0.12, now + 0.6);
-        }
+        gain.cancelScheduledValues(now);
+        gain.setValueAtTime(Math.max(0.001, gain.value), now);
+        gain.exponentialRampToValueAtTime(isDucking ? 0.015 : AMBIENT_LEVEL, now + (isDucking ? 0.25 : 0.6));
       } catch (_) {}
     }
     if (typeof this.onDuck === 'function') {
@@ -185,6 +185,9 @@ class AudioEngine {
     if (!this.voiceEnabled || !('speechSynthesis' in window)) return;
     try {
       if (priority) {
+        // cancel() fires onend/onerror for everything queued; reset first so the
+        // refcount below doesn't go negative and the music doesn't flicker.
+        this.activeSpeech = 0;
         window.speechSynthesis.cancel();
       }
       const utterance = new SpeechSynthesisUtterance(text);
@@ -193,26 +196,30 @@ class AudioEngine {
       }
       utterance.rate = 0.95; // Slightly slower, calm bedtime pace
       utterance.pitch = 1.0;
-      utterance.volume = 1.0; // Clear full volume
+      utterance.volume = 1.0;
 
-      utterance.onstart = () => {
-        this.duck(true);
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        this.activeSpeech = Math.max(0, this.activeSpeech - 1);
+        if (this.activeSpeech === 0) this.duck(false);
       };
-      utterance.onend = () => {
-        this.duck(false);
-      };
-      utterance.onerror = () => {
-        this.duck(false);
-      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
 
+      if (this.activeSpeech === 0) this.duck(true);
+      this.activeSpeech++;
       window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.warn('Speech synthesis error:', e);
+      this.activeSpeech = 0;
       this.duck(false);
     }
   }
 
   stopSpeech() {
+    this.activeSpeech = 0;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -222,44 +229,35 @@ class AudioEngine {
   // --- Ambient Background Soundscape ---
   startAmbient(mode = this.ambientMode) {
     this.ambientMode = mode;
-    if (this.ambientPlaying) {
-      this.stopAmbient();
-    }
+    // Replace (not stack on) whatever is playing; the old session fades out on its own nodes
+    this.stopAmbient();
     if (mode === 'silence' || !mode) return;
 
     try {
       const ctx = this.ensureContext();
-      this.ambientGain = ctx.createGain();
-      this.ambientGain.gain.setValueAtTime(0.001, ctx.currentTime);
-      this.ambientGain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 3.0); // Gentle fade in
-      this.ambientGain.connect(this.masterGain);
+      const now = ctx.currentTime;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      // Come in ducked if the coach is mid-sentence
+      gain.gain.exponentialRampToValueAtTime(this.activeSpeech > 0 ? 0.015 : AMBIENT_LEVEL, now + 3.0);
+      gain.connect(this.masterGain);
 
+      const nodes = [];
       if (mode === 'drone') {
-        // Binaural 432 Hz warm harmonic sleep drone
-        const freqs = [108, 216, 432, 436]; // 4Hz theta wave beat
-        freqs.forEach(f => {
+        // Warm 432 Hz harmonic sleep drone with a 4 Hz theta beat (432 vs 436)
+        [108, 216, 432, 436].forEach(f => {
           const osc = ctx.createOscillator();
           const filter = ctx.createBiquadFilter();
           filter.type = 'lowpass';
-          filter.frequency.setValueAtTime(600, ctx.currentTime);
-
+          filter.frequency.setValueAtTime(600, now);
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(f, ctx.currentTime);
-
-          // Subtle LFO for breathing swell
-          const lfo = ctx.createOscillator();
-          const lfoGain = ctx.createGain();
-          lfo.frequency.setValueAtTime(0.1, ctx.currentTime); // 10s breathing cycle
-          lfoGain.gain.setValueAtTime(0.03, ctx.currentTime);
-          lfo.connect(lfoGain.gain);
-
+          osc.frequency.setValueAtTime(f, now);
           osc.connect(filter);
-          filter.connect(this.ambientGain);
+          filter.connect(gain);
           osc.start();
-          this.ambientSourceNodes.push(osc);
+          nodes.push(osc);
         });
       } else if (mode === 'rain') {
-        // Lush Night Rain generator: pink noise filtered with seamless loop fade
         const bufferSize = ctx.sampleRate * 4;
         const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const output = noiseBuffer.getChannelData(0);
@@ -272,11 +270,10 @@ class AudioEngine {
           b3 = 0.86650 * b3 + white * 0.3104856;
           b4 = 0.55000 * b4 + white * 0.5329522;
           b5 = -0.7616 * b5 - white * 0.0168980;
-          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.45; // Audible, calming rain volume
+          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.45;
           b6 = white * 0.115926;
         }
-
-        // Seamless loop crossfade (prevent any pop/click at loop boundary)
+        // Fade the loop edges to avoid a click at the loop boundary
         const fadeSamples = 2400;
         for (let i = 0; i < fadeSamples; i++) {
           const factor = i / fadeSamples;
@@ -287,40 +284,33 @@ class AudioEngine {
         const rainSource = ctx.createBufferSource();
         rainSource.buffer = noiseBuffer;
         rainSource.loop = true;
-
         const rainFilter = ctx.createBiquadFilter();
         rainFilter.type = 'lowpass';
-        rainFilter.frequency.setValueAtTime(1200, ctx.currentTime);
-
+        rainFilter.frequency.setValueAtTime(1200, now);
         rainSource.connect(rainFilter);
-        rainFilter.connect(this.ambientGain);
+        rainFilter.connect(gain);
         rainSource.start();
-        this.ambientSourceNodes.push(rainSource);
-
+        nodes.push(rainSource);
       } else if (mode === 'bowls') {
-        // Harmonic Tibetan singing bowl drone
-        const bowlFreqs = [216, 288, 432, 576];
-        bowlFreqs.forEach(freq => {
+        [216, 288, 432, 576].forEach(freq => {
           const osc = ctx.createOscillator();
           const filter = ctx.createBiquadFilter();
           const oscGain = ctx.createGain();
-          oscGain.gain.setValueAtTime(0.25, ctx.currentTime);
-
+          oscGain.gain.setValueAtTime(0.25, now);
           filter.type = 'bandpass';
-          filter.frequency.setValueAtTime(freq, ctx.currentTime);
-          filter.Q.setValueAtTime(2.5, ctx.currentTime);
-
+          filter.frequency.setValueAtTime(freq, now);
+          filter.Q.setValueAtTime(2.5, now);
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, ctx.currentTime);
-
+          osc.frequency.setValueAtTime(freq, now);
           osc.connect(filter);
           filter.connect(oscGain);
-          oscGain.connect(this.ambientGain);
+          oscGain.connect(gain);
           osc.start();
-          this.ambientSourceNodes.push(osc);
+          nodes.push(osc);
         });
       }
 
+      this.ambientSession = { gain, nodes, stopping: false };
       this.ambientPlaying = true;
     } catch (e) {
       console.warn('Ambient soundscape start error:', e);
@@ -328,21 +318,28 @@ class AudioEngine {
   }
 
   stopAmbient() {
-    if (!this.ambientPlaying) return;
+    const session = this.ambientSession;
+    if (!session) return;
+    // Detach immediately: a start that follows owns a fresh session, so the delayed
+    // teardown below can never kill its nodes.
+    this.ambientSession = null;
+    this.ambientPlaying = false;
+    session.stopping = true;
     try {
-      if (this.ambientGain && this.ctx) {
-        this.ambientGain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 1.5);
-      }
-      setTimeout(() => {
-        this.ambientSourceNodes.forEach(node => {
-          try { node.stop(); node.disconnect(); } catch (_) {}
-        });
-        this.ambientSourceNodes = [];
-        this.ambientPlaying = false;
-      }, 1600);
+      const g = session.gain.gain;
+      const now = this.ctx.currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(Math.max(0.0001, g.value), now);
+      g.exponentialRampToValueAtTime(0.0001, now + 1.5);
     } catch (e) {
       console.warn('Stop ambient error:', e);
     }
+    setTimeout(() => {
+      session.nodes.forEach(node => {
+        try { node.stop(); node.disconnect(); } catch (_) {}
+      });
+      try { session.gain.disconnect(); } catch (_) {}
+    }, 1600);
   }
 
   setVolume(val) {

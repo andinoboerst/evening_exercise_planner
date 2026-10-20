@@ -1,8 +1,11 @@
-// Spotify Service: In-app Web Playback SDK, background Web API remote playback, and embed player
+// Spotify Service: Web API remote playback (PKCE login), Web Playback SDK device, and playlist catalog
 
 const SPOTIFY_CLIENT_ID_KEY = 'nocturne_spotify_client_id';
 const SPOTIFY_TOKEN_KEY = 'nocturne_spotify_token';
 const SPOTIFY_PLAYLIST_KEY = 'nocturne_spotify_playlist_pref';
+const SPOTIFY_VERIFIER_KEY = 'nocturne_spotify_verifier';
+const SPOTIFY_STATE_KEY = 'nocturne_spotify_oauth_state';
+const API = 'https://api.spotify.com/v1/me/player';
 
 export const CURATED_PLAYLISTS = [
   {
@@ -12,17 +15,7 @@ export const CURATED_PLAYLISTS = [
     description: 'Mellow grooves, warm beats for strength and mobility.',
     uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M',
-    tag: 'Strength & Flow',
-    tracks: [
-      'spotify:track:4cOdK2wGLETKBW3PvgPWqT',
-      'spotify:track:0b9oOr9gqNmU265g4m9L0V',
-      'spotify:track:17i5j0oT1A8A2g5E6y9r8g',
-      'spotify:track:3AJwUDP919kvQ9QcozQPxg',
-      'spotify:track:27GmP9AWRs744SzKcpJsTZ',
-      'spotify:track:5u8b15YFz9m6K6gW49T6L2',
-      'spotify:track:7dt6x5M1jFuuqQKO5008nM',
-      'spotify:track:0VjIjW4GlUZAMYd2vXMi3b'
-    ]
+    tag: 'Strength & Flow'
   },
   {
     id: 'evening_acoustic',
@@ -31,16 +24,7 @@ export const CURATED_PLAYLISTS = [
     description: 'Gentle guitar and calm melodies for decompression.',
     uri: 'spotify:playlist:37i9dQZF1DX4E3UdUs7fUx',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DX4E3UdUs7fUx',
-    tag: 'Stretching',
-    tracks: [
-      'spotify:track:5ihDGnhQgMA0F0tk9fNLl8',
-      'spotify:track:0VjIjW4GlUZAMYd2vXMi3b',
-      'spotify:track:7dt6x5M1jFuuqQKO5008nM',
-      'spotify:track:3B54sVLJ402z9AhU97jGQA',
-      'spotify:track:1BxfuPKGuaTgP7aM0XbdQA',
-      'spotify:track:2Foc5Q5nqNgoFjiG5iMEZq',
-      'spotify:track:3AJwUDP919kvQ9QcozQPxg'
-    ]
+    tag: 'Stretching'
   },
   {
     id: 'ambient_sleep',
@@ -49,15 +33,7 @@ export const CURATED_PLAYLISTS = [
     description: 'Theta drone, calm strings, and soundscapes for wind-down.',
     uri: 'spotify:playlist:37i9dQZF1DWZd79rJ6a7lp',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DWZd79rJ6a7lp',
-    tag: 'Wind-Down',
-    tracks: [
-      'spotify:track:1lD6F39XF9YyA86mQxK6qL',
-      'spotify:track:7h98J7A4N17o7c0K1Q2q5V',
-      'spotify:track:4jA5d0X7X8aM0Q3B6x8f1g',
-      'spotify:track:24jA5c0Y8f1x9Q4m8K2e5R',
-      'spotify:track:0b1Q53M9L6aZ28F79q5Y3B',
-      'spotify:track:6habFh0Dc4MUmioWmKXE0F'
-    ]
+    tag: 'Wind-Down'
   },
   {
     id: 'peaceful_piano',
@@ -66,16 +42,7 @@ export const CURATED_PLAYLISTS = [
     description: 'Quiet piano for spinal stretches and mindful breathing.',
     uri: 'spotify:playlist:37i9dQZF1DX4sWSpwq3LiO',
     webUrl: 'https://open.spotify.com/playlist/37i9dQZF1DX4sWSpwq3LiO',
-    tag: 'Meditation',
-    tracks: [
-      'spotify:track:1q8ik4h0GfG4HlYd9aG5gJ',
-      'spotify:track:3rUv15b3K75mP308iVjW4G',
-      'spotify:track:4VqPOruhp5EdPBeR92t6lQ',
-      'spotify:track:0b1Q53M9L6aZ28F79q5Y3B',
-      'spotify:track:6habFh0Dc4MUmioWmKXE0F',
-      'spotify:track:2d790Zc3B9N1A5F7x3X6dM',
-      'spotify:track:5ihDGnhQgMA0F0tk9fNLl8'
-    ]
+    tag: 'Meditation'
   }
 ];
 
@@ -83,46 +50,97 @@ class SpotifyService {
   constructor() {
     this.clientId = localStorage.getItem(SPOTIFY_CLIENT_ID_KEY) || '';
     this.token = null;
+    this.refreshToken = null;
+    this.expiresAt = 0;
     this.activePlaylistUri = localStorage.getItem(SPOTIFY_PLAYLIST_KEY) || CURATED_PLAYLISTS[0].uri;
     this.player = null;
     this.webPlayerDeviceId = null;
     this.availableDevices = [];
     this.isPlaying = false;
 
-    this.loadToken();
-    this.handleRedirectCallback();
+    // Ducking state (serialised so rapid speech start/stop never races API calls)
+    this._duckTarget = false;
+    this._duckApplied = false;
+    this._duckBusy = false;
+    this._restoreVolume = 80;
 
-    if (this.token) {
-      this.initWebPlaybackSDK();
-    }
+    this.loadToken();
+    // Resolves once a pending OAuth redirect (if any) has been processed
+    this.ready = this.handleRedirectCallback().then(() => {
+      if (this.token) this.initWebPlaybackSDK();
+    });
   }
+
+  // --- Token storage -------------------------------------------------------
 
   loadToken() {
     try {
       const stored = localStorage.getItem(SPOTIFY_TOKEN_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.expires_at > Date.now()) {
-          this.token = parsed.access_token;
-        } else {
-          localStorage.removeItem(SPOTIFY_TOKEN_KEY);
-          this.token = null;
-        }
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      this.refreshToken = parsed.refresh_token || null;
+      this.expiresAt = parsed.expires_at || 0;
+      if (parsed.access_token && parsed.expires_at > Date.now() + 30_000) {
+        this.token = parsed.access_token;
+      } else if (!this.refreshToken) {
+        localStorage.removeItem(SPOTIFY_TOKEN_KEY);
       }
     } catch (_) {
       this.token = null;
     }
   }
 
-  saveToken(accessToken, expiresInSec) {
-    this.token = accessToken;
-    const expiresAt = Date.now() + (expiresInSec * 1000);
+  saveToken({ access_token, refresh_token, expires_in }) {
+    this.token = access_token;
+    this.refreshToken = refresh_token || this.refreshToken;
+    this.expiresAt = Date.now() + (expires_in * 1000);
     localStorage.setItem(SPOTIFY_TOKEN_KEY, JSON.stringify({
-      access_token: accessToken,
-      expires_at: expiresAt
+      access_token: this.token,
+      refresh_token: this.refreshToken,
+      expires_at: this.expiresAt
     }));
-    this.initWebPlaybackSDK();
   }
+
+  // Returns a valid access token, refreshing it when it is about to expire
+  async getValidToken() {
+    if (this.token && this.expiresAt > Date.now() + 30_000) return this.token;
+    if (!this.refreshToken || !this.clientId) {
+      if (this.token) this.disconnect();
+      return null;
+    }
+    try {
+      const res = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: this.refreshToken,
+          client_id: this.clientId
+        }).toString()
+      });
+      const data = await res.json();
+      if (!data.access_token) throw new Error(data.error_description || 'refresh failed');
+      this.saveToken(data);
+      return this.token;
+    } catch (e) {
+      console.warn('[Spotify] token refresh failed:', e);
+      this.disconnect();
+      return null;
+    }
+  }
+
+  // Authenticated fetch against the Web API. Returns the Response or null when disconnected.
+  async api(path, options = {}) {
+    const token = await this.getValidToken();
+    if (!token) return null;
+    const url = path.startsWith('http') ? path : `${API}${path}`;
+    return fetch(url, {
+      ...options,
+      headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
+    });
+  }
+
+  // --- Settings / catalog --------------------------------------------------
 
   setClientId(clientId) {
     this.clientId = clientId.trim();
@@ -143,103 +161,76 @@ class SpotifyService {
     return item.spotifyId || item.uri.replace('spotify:playlist:', '');
   }
 
-  getRandomTrackUri(playlistUri = this.activePlaylistUri) {
-    const playlist = CURATED_PLAYLISTS.find(p => p.uri === playlistUri) || this.getActivePlaylist();
-    if (playlist && playlist.tracks && playlist.tracks.length > 0) {
-      const idx = Math.floor(Math.random() * playlist.tracks.length);
-      return playlist.tracks[idx];
-    }
-    return null;
-  }
-
-  getRandomAppDeepLink(playlistUri = this.activePlaylistUri) {
-    const playlist = CURATED_PLAYLISTS.find(p => p.uri === playlistUri) || this.getActivePlaylist();
-    const trackUri = this.getRandomTrackUri(playlistUri);
-    if (trackUri && playlist) {
-      const trackId = trackUri.replace('spotify:track:', '');
-      return `https://open.spotify.com/track/${trackId}?context=spotify:playlist:${playlist.spotifyId}`;
-    }
-    return playlist ? playlist.uri : this.activePlaylistUri;
-  }
-
+  // A connected session is one we can still authenticate (valid token, or refreshable)
   isConnected() {
-    return Boolean(this.token);
+    return Boolean(this.token) || Boolean(this.refreshToken && this.clientId);
   }
 
-  // --- Official Spotify Web Playback SDK (In-browser player) ---
+  // --- Official Spotify Web Playback SDK (In-browser player device) ---------
+
   initWebPlaybackSDK() {
-    if (!this.token) return;
+    if (!this.token || this.player) return;
 
     const setup = () => {
       if (this.player || !window.Spotify) return;
       try {
         this.player = new window.Spotify.Player({
           name: 'AndiNú Web Player',
-          getOAuthToken: cb => cb(this.token),
+          getOAuthToken: async cb => {
+            const t = await this.getValidToken();
+            if (t) cb(t);
+          },
           volume: 0.8
         });
 
         this.player.addListener('ready', ({ device_id }) => {
-          console.log('[Nocturne] Spotify in-browser player ready! Device ID:', device_id);
           this.webPlayerDeviceId = device_id;
         });
-
         this.player.addListener('not_ready', ({ device_id }) => {
-          console.log('[Nocturne] Spotify player device offline:', device_id);
-          if (this.webPlayerDeviceId === device_id) {
-            this.webPlayerDeviceId = null;
-          }
+          if (this.webPlayerDeviceId === device_id) this.webPlayerDeviceId = null;
         });
-
         this.player.addListener('player_state_changed', state => {
-          if (state) {
-            this.isPlaying = !state.paused;
-          }
+          if (state) this.isPlaying = !state.paused;
         });
-
         this.player.addListener('initialization_error', ({ message }) => {
-          console.warn('[Nocturne] Spotify SDK init error:', message);
+          console.warn('[Spotify] SDK init error:', message);
         });
-
         this.player.addListener('authentication_error', ({ message }) => {
-          console.warn('[Nocturne] Spotify SDK auth error:', message);
+          console.warn('[Spotify] SDK auth error:', message);
           this.disconnect();
         });
-
         this.player.addListener('account_error', ({ message }) => {
-          console.warn('[Nocturne] Spotify SDK Premium account required for Web Playback SDK:', message);
+          console.warn('[Spotify] Premium account required for Web Playback SDK:', message);
         });
 
         this.player.connect();
       } catch (err) {
-        console.warn('Error creating Spotify player:', err);
+        console.warn('[Spotify] Error creating player:', err);
       }
     };
 
     if (window.Spotify) {
       setup();
     } else {
-      window.onSpotifyWebPlaybackSDKReady = setup;
+      window.addEventListener('spotify-sdk-ready', setup, { once: true });
     }
   }
 
-  // Generate PKCE code verifier and challenge
+  // --- PKCE login ----------------------------------------------------------
+
   async generateCodeChallenge(codeVerifier) {
     const data = new TextEncoder().encode(codeVerifier);
     const digest = await window.crypto.subtle.digest('SHA-256', data);
-    return btoa(String.fromCharCode.apply(null, [...new Uint8Array(digest)]))
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
   }
 
   generateRandomString(length) {
-    let text = '';
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < length; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
+    const values = crypto.getRandomValues(new Uint8Array(length));
+    return Array.from(values, v => possible[v % possible.length]).join('');
   }
 
   async loginWithPKCE() {
@@ -249,69 +240,72 @@ class SpotifyService {
 
     const verifier = this.generateRandomString(128);
     const challenge = await this.generateCodeChallenge(verifier);
+    const state = this.generateRandomString(24);
 
-    localStorage.setItem('spotify_verifier', verifier);
-
-    const redirectUri = window.location.origin + window.location.pathname;
-    const scope = 'user-modify-playback-state user-read-playback-state user-read-currently-playing streaming';
+    localStorage.setItem(SPOTIFY_VERIFIER_KEY, verifier);
+    localStorage.setItem(SPOTIFY_STATE_KEY, state);
 
     const params = new URLSearchParams({
       client_id: this.clientId,
       response_type: 'code',
-      redirect_uri: redirectUri,
-      scope: scope,
+      redirect_uri: window.location.origin + window.location.pathname,
+      scope: 'user-modify-playback-state user-read-playback-state user-read-currently-playing streaming',
       code_challenge_method: 'S256',
-      code_challenge: challenge
+      code_challenge: challenge,
+      state
     });
 
     window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
   }
 
+  // Only consumes the URL when it is OUR Spotify redirect (matching state). Supabase's
+  // Google login also returns a `?code=` and must be left untouched.
   async handleRedirectCallback() {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const expectedState = localStorage.getItem(SPOTIFY_STATE_KEY);
 
-    if (code) {
-      const verifier = localStorage.getItem('spotify_verifier');
-      const redirectUri = window.location.origin + window.location.pathname;
+    if (!code || !state || !expectedState || state !== expectedState) return false;
 
-      window.history.replaceState({}, document.title, window.location.pathname);
+    const verifier = localStorage.getItem(SPOTIFY_VERIFIER_KEY);
+    const redirectUri = window.location.origin + window.location.pathname;
 
-      if (verifier && this.clientId) {
-        try {
-          const body = new URLSearchParams({
-            client_id: this.clientId,
-            grant_type: 'authorization_code',
-            code: code,
-            redirect_uri: redirectUri,
-            code_verifier: verifier
-          });
+    window.history.replaceState({}, document.title, window.location.pathname);
+    localStorage.removeItem(SPOTIFY_STATE_KEY);
+    localStorage.removeItem(SPOTIFY_VERIFIER_KEY);
 
-          const response = await fetch('https://accounts.spotify.com/api/token', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: body.toString()
-          });
+    if (!verifier || !this.clientId) return false;
 
-          const data = await response.json();
-          if (data.access_token) {
-            this.saveToken(data.access_token, data.expires_in);
-            localStorage.removeItem('spotify_verifier');
-            return true;
-          }
-        } catch (e) {
-          console.error('Spotify token exchange failed', e);
-        }
+    try {
+      const response = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: this.clientId,
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+          code_verifier: verifier
+        }).toString()
+      });
+      const data = await response.json();
+      if (data.access_token) {
+        this.saveToken(data);
+        return true;
       }
+    } catch (e) {
+      console.error('Spotify token exchange failed', e);
     }
     return false;
   }
 
   disconnect() {
     this.token = null;
+    this.refreshToken = null;
+    this.expiresAt = 0;
     this.webPlayerDeviceId = null;
+    this.isPlaying = false;
     if (this.player) {
       try { this.player.disconnect(); } catch (_) {}
       this.player = null;
@@ -319,176 +313,164 @@ class SpotifyService {
     localStorage.removeItem(SPOTIFY_TOKEN_KEY);
   }
 
-  // Fetch available Spotify Connect devices
+  // --- Playback ------------------------------------------------------------
+
   async getDevices() {
-    if (!this.token) return [];
     try {
-      const res = await fetch('https://api.spotify.com/v1/me/player/devices', {
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      });
-      if (res.ok) {
+      const res = await this.api('/devices');
+      if (res?.ok) {
         const data = await res.json();
         this.availableDevices = data.devices || [];
         return this.availableDevices;
       }
     } catch (e) {
-      console.warn('Error fetching Spotify devices:', e);
+      console.warn('[Spotify] Error fetching devices:', e);
     }
     return [];
   }
 
-  // Transfer playback to a specific device ID
   async transferPlayback(deviceId, play = true) {
-    if (!this.token || !deviceId) return false;
+    if (!deviceId) return false;
     try {
-      const res = await fetch('https://api.spotify.com/v1/me/player', {
+      const res = await this.api('', {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          device_ids: [deviceId],
-          play: play
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_ids: [deviceId], play })
       });
-      return res.ok;
+      return Boolean(res?.ok);
     } catch (e) {
-      console.warn('Error transferring playback:', e);
+      console.warn('[Spotify] Error transferring playback:', e);
       return false;
     }
   }
 
-  // Toggle Spotify shuffle state
   async setShuffle(state = true, deviceId = null) {
-    if (!this.token) return;
     try {
-      const url = deviceId 
-        ? `https://api.spotify.com/v1/me/player/shuffle?state=${state}&device_id=${deviceId}`
-        : `https://api.spotify.com/v1/me/player/shuffle?state=${state}`;
-      await fetch(url, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      });
+      const qs = new URLSearchParams({ state: String(state) });
+      if (deviceId) qs.set('device_id', deviceId);
+      await this.api(`/shuffle?${qs}`, { method: 'PUT' });
     } catch (e) {
-      console.warn('Spotify setShuffle error:', e);
+      console.warn('[Spotify] setShuffle error:', e);
     }
   }
 
-  // Trigger Playback in background WITHOUT EVER jumping out of the app
-  // Automatically randomizes starting position & enables shuffle so it doesn't repeat the same initial song!
+  // Pick the best target device: active > in-app web player > any available
+  async resolveDevice() {
+    const devices = await this.getDevices();
+    const active = devices.find(d => d.is_active);
+    if (active) return active.id;
+
+    const fallback = this.webPlayerDeviceId || devices[0]?.id || null;
+    if (fallback) await this.transferPlayback(fallback, false);
+    return fallback;
+  }
+
+  // Start a context from the beginning (shuffled so each session opens on a different song)
   async play(contextUri = this.activePlaylistUri, shuffle = true) {
-    if (!this.token) {
-      // Not logged in: keep inside app, user can use embedded player or ambient sounds
-      return false;
-    }
+    if (!this.isConnected()) return false;
 
     try {
-      const devices = await this.getDevices();
-      let targetDeviceId = null;
+      const deviceId = await this.resolveDevice();
+      if (shuffle) await this.setShuffle(true, deviceId);
 
-      // 1. Check for already active device
-      const activeDev = devices.find(d => d.is_active);
-      if (activeDev) {
-        targetDeviceId = activeDev.id;
-      } else if (this.webPlayerDeviceId) {
-        // 2. Use in-app Web Playback SDK device
-        targetDeviceId = this.webPlayerDeviceId;
-        await this.transferPlayback(targetDeviceId, true);
-      } else if (devices.length > 0) {
-        // 3. Use any available Spotify Connect device (phone / computer / speaker)
-        targetDeviceId = devices[0].id;
-        await this.transferPlayback(targetDeviceId, true);
-      }
-
-      if (shuffle) {
-        await this.setShuffle(true, targetDeviceId);
-      }
-
-      // Pick a random track index (0-25) so each routine starts on a fresh, different song!
-      const randomOffset = shuffle ? Math.floor(Math.random() * 25) : 0;
-
-      const url = targetDeviceId 
-        ? `https://api.spotify.com/v1/me/player/play?device_id=${targetDeviceId}`
-        : 'https://api.spotify.com/v1/me/player/play';
-
-      const res = await fetch(url, {
+      const qs = deviceId ? `?device_id=${deviceId}` : '';
+      const put = (offset) => this.api(`/play${qs}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           context_uri: contextUri,
-          offset: { position: randomOffset },
+          ...(offset !== null ? { offset: { position: offset } } : {}),
           position_ms: 0
         })
       });
 
-      if (res.ok) {
-        this.isPlaying = true;
-        return true;
-      } else {
-        // Fallback without offset if position exceeded list bounds
-        const retryRes = await fetch(url, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${this.token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            context_uri: contextUri,
-            offset: { position: 0 },
-            position_ms: 0
-          })
-        });
-        if (retryRes.ok) {
-          this.isPlaying = true;
-          return true;
-        }
-        console.warn('Spotify play response status:', res.status);
-        return false;
-      }
+      // Random start offset; fall back to the top if it exceeds the playlist length
+      let res = await put(shuffle ? Math.floor(Math.random() * 25) : null);
+      if (res && !res.ok && shuffle) res = await put(0);
+
+      this.isPlaying = Boolean(res?.ok);
+      if (res && !res.ok) console.warn('[Spotify] play failed with status', res.status);
+      return this.isPlaying;
     } catch (e) {
-      console.warn('Spotify play error:', e);
+      console.warn('[Spotify] play error:', e);
+      return false;
+    }
+  }
+
+  // Continue whatever was paused (does NOT restart the playlist)
+  async resume() {
+    if (!this.isConnected()) return false;
+    try {
+      const res = await this.api('/play', { method: 'PUT' });
+      this.isPlaying = Boolean(res?.ok);
+      return this.isPlaying;
+    } catch (e) {
+      console.warn('[Spotify] resume error:', e);
       return false;
     }
   }
 
   async pause() {
-    if (!this.token) return;
+    if (!this.isConnected()) return;
     try {
-      await fetch('https://api.spotify.com/v1/me/player/pause', {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      });
+      await this.api('/pause', { method: 'PUT' });
       this.isPlaying = false;
     } catch (e) {
-      console.warn('Spotify pause error:', e);
+      console.warn('[Spotify] pause error:', e);
     }
   }
 
-  // Audio Ducking: lowers music during voice coach instructions
   async setVolume(percent) {
-    if (!this.token) return;
+    if (!this.isConnected()) return;
     const clamped = Math.max(0, Math.min(100, Math.round(percent)));
     try {
       if (this.player) {
         try { await this.player.setVolume(clamped / 100); } catch (_) {}
       }
-      await fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${clamped}`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      });
+      await this.api(`/volume?volume_percent=${clamped}`, { method: 'PUT' });
     } catch (e) {
-      console.warn('Spotify setVolume error:', e);
+      console.warn('[Spotify] setVolume error:', e);
     }
   }
 
-  async duck(isDucking) {
-    // When coach speaks, duck to 20%, when finished restore to 80%
-    const target = isDucking ? 20 : 80;
-    await this.setVolume(target);
+  async getCurrentVolume() {
+    try {
+      const res = await this.api('');
+      if (res?.ok && res.status !== 204) {
+        const data = await res.json();
+        const v = data?.device?.volume_percent;
+        if (Number.isFinite(v)) return v;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Audio ducking: lowers music while the voice coach speaks, then restores the
+  // volume the user actually had. Calls are coalesced: only the latest request wins.
+  duck(isDucking) {
+    this._duckTarget = isDucking;
+    if (!this.isConnected()) return Promise.resolve();
+    if (!this._duckBusy) this._duckLoop();
+    return Promise.resolve();
+  }
+
+  async _duckLoop() {
+    this._duckBusy = true;
+    try {
+      while (this._duckTarget !== this._duckApplied) {
+        const target = this._duckTarget;
+        if (target) {
+          const current = await this.getCurrentVolume();
+          if (current !== null && current > 20) this._restoreVolume = current;
+          await this.setVolume(20);
+        } else {
+          await this.setVolume(this._restoreVolume);
+        }
+        this._duckApplied = target;
+      }
+    } finally {
+      this._duckBusy = false;
+    }
   }
 }
 

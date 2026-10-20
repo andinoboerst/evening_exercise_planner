@@ -2,138 +2,102 @@ import { WEEKLY_ROUTINES, getRoutineForDay } from '../data/routines.js';
 import { audioEngine } from '../audio/audioEngine.js';
 import { spotifyService, CURATED_PLAYLISTS } from '../services/spotify.js';
 import { wakeLockService } from '../services/wakeLock.js';
+import { RoutineSession, buildSteps, totalDurationSec } from '../routine/session.js';
+import { music, SOURCE } from '../routine/music.js';
 import { getPoseImage } from '../utils/poseImages.js';
 import confetti from 'canvas-confetti';
 import QRCode from 'qrcode';
+import { escapeHtml } from '../utils/escapeHtml.js';
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
 
 let routineContainer = null;
+let activeRoutine = getRoutineForDay(new Date().getDay());
 
-// App State
-let currentDayIndex = new Date().getDay(); // 0 is Sunday, 1 is Monday, etc.
-let activeRoutine = getRoutineForDay(currentDayIndex);
+// Phases the couple wants tonight (customisable before starting)
+const enabledPhases = { strength: true, mobility: true, windDown: true };
 
-let isRunning = false;
-let isPaused = false;
-let timerInterval = null;
+// Voice / bell preferences (music preferences live in the music controller)
+const settings = { voiceEnabled: true, soundEffectsEnabled: true };
 
-// Routine Progress Tracking
-let currentPhaseIndex = 0;
-let currentExerciseIndex = 0;
-let isRestInterval = false;
-let intervalRemainingSec = 0; // Countdown for active interval (work or rest)
-let totalRoutineElapsedSec = 0;
-
-// Enabled Routine Phases (Customizable per session)
-let enabledPhases = {
-  strength: true,
-  mobility: true,
-  windDown: true
-};
-
-let currentStepIndex = 0;
-let flattenedSteps = [];
 const TIMER_RADIUS = 60; // Duo circular timer radius (viewBox 0 0 140 140, cx 70, cy 70)
 
-// Flattened steps calculation for exact timeline
-function buildFlattenedSteps(routine) {
-  const steps = [];
-  routine.phases.forEach((phase, pIdx) => {
-    // Skip phase if user disabled it
-    if (!enabledPhases[phase.id]) return;
+const session = new RoutineSession({
+  onTick: handleTick,
+  onStepChange: handleStepChange,
+  onComplete: handleComplete
+});
 
-    phase.exercises.forEach((ex, eIdx) => {
-      // Work step
-      steps.push({
-        phaseIndex: pIdx,
-        exerciseIndex: eIdx,
-        isRest: false,
-        duration: ex.duration,
-        phase: phase,
-        exercise: ex
-      });
-      // Rest step if any
-      if (ex.rest && ex.rest > 0) {
-        steps.push({
-          phaseIndex: pIdx,
-          exerciseIndex: eIdx,
-          isRest: true,
-          duration: ex.rest,
-          phase: phase,
-          exercise: ex
-        });
-      }
-    });
-  });
-  return steps;
+let isStarting = false;
+
+const PHASE_META = [
+  { id: 'strength', cssClass: 'strength', label: 'Strength', icon: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>' },
+  { id: 'mobility', cssClass: 'mobility', label: 'Mobility', icon: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path>' },
+  { id: 'windDown', cssClass: 'winddown', label: 'Wind Down', icon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>' }
+];
+
+// ---------------------------------------------------------------------------
+// Derived values
+// ---------------------------------------------------------------------------
+
+function rebuildSteps() {
+  session.setSteps(buildSteps(activeRoutine, enabledPhases));
 }
 
-flattenedSteps = buildFlattenedSteps(activeRoutine);
+const isLive = () => session.running && !session.paused;
+const isRunningNow = () => session.running;
+const isPausedNow = () => session.paused;
+const isSpotifyApp = () => music.source === SOURCE.APP;
+const isSpotifyEmbed = () => music.source === SOURCE.EMBED;
+const canShuffle = () => music.source === SOURCE.APP && spotifyService.isConnected();
 
-function getEnabledDurationSec() {
-  if (flattenedSteps && flattenedSteps.length > 0) {
-    return flattenedSteps.reduce((acc, step) => acc + step.duration, 0);
-  }
-  let sec = 0;
-  if (enabledPhases.strength) sec += 600; // 10 min
-  if (enabledPhases.mobility) sec += 900; // 15 min
-  if (enabledPhases.windDown) sec += 300; // 5 min
-  return sec;
+const getEnabledDurationSec = () => totalDurationSec(session.steps);
+const getEnabledDurationMin = () => Math.round(getEnabledDurationSec() / 60);
+const getRoutineElapsedSec = () => session.elapsedSec;
+const getRoutineRemainingSec = () => (session.running ? Math.ceil(session.totalRemainingSec) : getEnabledDurationSec());
+
+function routineMinutes(routine) {
+  if (!routine) return getEnabledDurationMin();
+  return Math.round(totalDurationSec(buildSteps(routine, enabledPhases)) / 60);
 }
 
-function getEnabledDurationMin() {
-  return Math.round(getEnabledDurationSec() / 60);
+function phaseMinutes(phaseId) {
+  const phase = activeRoutine.phases.find(p => p.id === phaseId);
+  if (!phase) return 0;
+  return Math.round(phase.exercises.reduce((acc, ex) => acc + ex.duration + (ex.rest || 0), 0) / 60);
 }
-
-// Calculate exact remaining time based on current interval seconds + all future exercises
-function getRoutineRemainingSec() {
-  if (!isRunning || currentStepIndex >= flattenedSteps.length) {
-    return getEnabledDurationSec();
-  }
-  let remaining = Math.max(0, intervalRemainingSec);
-  for (let i = currentStepIndex + 1; i < flattenedSteps.length; i++) {
-    remaining += flattenedSteps[i].duration;
-  }
-  return remaining;
-}
-
-// Calculate elapsed time from enabled total minus actual remaining
-function getRoutineElapsedSec() {
-  const total = getEnabledDurationSec();
-  return Math.max(0, total - getRoutineRemainingSec());
-}
-
-// Audio / Feature Settings
-let settings = {
-  voiceEnabled: true,
-  soundEffectsEnabled: true,
-  audioSource: 'spotify-app', // 'spotify-app' (default!), 'ambient', 'spotify-embed', 'silent'
-  ambientSound: 'drone'       // 'drone', 'rain', 'bowls'
-};
-
-const isSpotifyApp = () => settings.audioSource === 'spotify-app' || settings.audioSource === 'spotify';
-const isSpotifyEmbed = () => settings.audioSource === 'spotify-embed';
-const isSpotifyAudio = () => settings.audioSource !== 'ambient' && settings.audioSource !== 'silent';
-
-let spotifyEmbedController = null;
-let pendingSpotifyPlay = false;
-
-// Audio Ducking: automatically lower Spotify background music when voice coach speaks
-audioEngine.onDuck = (isDucking) => {
-  if (isSpotifyApp() || isSpotifyEmbed()) {
-    spotifyService.duck(isDucking);
-  }
-};
 
 // Format seconds into MM:SS
 function formatTime(sec) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
+  const total = Math.max(0, Math.floor(sec));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+function renderPhasePills() {
+  return PHASE_META.map((meta, idx) => {
+    const enabled = enabledPhases[meta.id];
+    const current = session.running && session.currentStep?.phaseIndex === idx;
+    return `
+      <div class="phase-pill ${meta.cssClass} ${!enabled ? 'disabled' : ''} ${current ? 'current-phase' : ''}">
+        <span class="phase-pill-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">${meta.icon}</svg>
+          ${meta.label}
+        </span>
+        <span class="phase-pill-duration">${enabled ? `${phaseMinutes(meta.id)} min` : 'Skipped'}</span>
+      </div>`;
+  }).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
 
 // Render Main App Shell
-function renderApp(container = routineContainer || document.getElementById('app')) {
+function renderApp(container = routineContainer) {
   const appEl = container;
   if (!appEl) return;
   appEl.innerHTML = `
@@ -150,7 +114,7 @@ function renderApp(container = routineContainer || document.getElementById('app'
           <div class="brand-subtitle">
             <span>${getEnabledDurationMin()}m Couples Mat Routine</span>
             <span>•</span>
-            <span id="wake-lock-badge" style="color: #38bdf8;">Screen Awake</span>
+            <span id="wake-lock-badge" style="color: #38bdf8;">${wakeLockService.isActive ? 'Screen Awake' : ''}</span>
           </div>
         </div>
       </div>
@@ -187,7 +151,7 @@ function renderApp(container = routineContainer || document.getElementById('app'
           return `
             <button class="day-chip ${isSelected ? 'active' : ''} ${isToday ? 'is-today' : ''}" data-day="${dIdx}">
               <span class="day-chip-name">${shortName}</span>
-              <span class="day-chip-state">${isToday ? 'Today' : `${getEnabledDurationMin()}m`}</span>
+              <span class="day-chip-state">${isToday ? 'Today' : `${routineMinutes(r)}m`}</span>
             </button>
           `;
         }).join('')}
@@ -195,29 +159,7 @@ function renderApp(container = routineContainer || document.getElementById('app'
     </div>
 
     <!-- Phase Breakdown Pills -->
-    <div class="phase-breakdown-bar">
-      <div class="phase-pill strength ${!enabledPhases.strength ? 'disabled' : ''} ${currentPhaseIndex === 0 && isRunning ? 'current-phase' : ''}">
-        <span class="phase-pill-title">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
-          Strength
-        </span>
-        <span class="phase-pill-duration">${enabledPhases.strength ? '10 min' : 'Skipped'}</span>
-      </div>
-      <div class="phase-pill mobility ${!enabledPhases.mobility ? 'disabled' : ''} ${currentPhaseIndex === 1 && isRunning ? 'current-phase' : ''}">
-        <span class="phase-pill-title">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
-          Mobility
-        </span>
-        <span class="phase-pill-duration">${enabledPhases.mobility ? '15 min' : 'Skipped'}</span>
-      </div>
-      <div class="phase-pill winddown ${!enabledPhases.windDown ? 'disabled' : ''} ${currentPhaseIndex === 2 && isRunning ? 'current-phase' : ''}">
-        <span class="phase-pill-title">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-          Wind Down
-        </span>
-        <span class="phase-pill-duration">${enabledPhases.windDown ? '5 min' : 'Skipped'}</span>
-      </div>
-    </div>
+    <div class="phase-breakdown-bar">${renderPhasePills()}</div>
 
     <!-- Main Dynamic Stage -->
     <main class="main-stage" id="main-stage">
@@ -225,25 +167,25 @@ function renderApp(container = routineContainer || document.getElementById('app'
     </main>
 
     <!-- Persistent Spotify Bedtime Player Dock (Mounted once, never unmounted across routine transitions!) -->
-    <div id="spotify-player-dock" class="spotify-player-dock ${isSpotifyAudio() ? '' : 'hidden'}">
+    <div id="spotify-player-dock" class="spotify-player-dock ${music.isSpotify ? '' : 'hidden'}">
       <div class="spotify-inapp-header">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span class="spotify-icon-dot">🎧</span>
           <div>
-            <span class="spotify-inapp-title" id="spotify-dock-title">${spotifyService.getActivePlaylist().name}</span>
+            <span class="spotify-inapp-title" id="spotify-dock-title">${music.playlist.name}</span>
             <span class="spotify-inapp-sub" id="spotify-dock-status">
-              ${isRunning ? '▶ Playing Bedtime Music • Auto-Ducking on voice' : (spotifyService.isConnected() ? 'Spotify Connected • Plays on Start' : 'In-App Player • Plays on Start')}
+              ${music.statusText(isRunningNow(), isPausedNow())}
             </span>
           </div>
         </div>
         <div style="display: flex; gap: 6px; align-items: center;">
-          <button id="btn-dock-shuffle" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;" title="Shuffle to a fresh song">
+          <button id="btn-dock-shuffle" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; display: ${canShuffle() ? 'inline-flex' : 'none'};" title="Shuffle to a fresh song">
             🔀 Shuffle
           </button>
-          <button id="btn-dock-play-pause" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; display: ${isRunning ? 'inline-flex' : 'none'};">
-            ${isPaused ? '▶ Resume' : '⏸ Pause'}
+          <button id="btn-dock-play-pause" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; display: ${session.running && music.canRemoteControl ? 'inline-flex' : 'none'};">
+            ${session.paused ? '▶ Resume' : '⏸ Pause'}
           </button>
-          <a id="btn-dock-open-app" href="${spotifyService.getRandomAppDeepLink()}" target="_blank" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; color: var(--spotify-green);" title="Play in Spotify app with shuffled starting track">
+          <a id="btn-dock-open-app" href="${music.playlist.uri}" target="_blank" rel="noopener noreferrer" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; color: var(--spotify-green);" title="Play in Spotify app with shuffled starting track">
             Spotify App ↗
           </a>
           <button id="btn-dock-change-playlist" class="icon-btn" style="width: auto; height: 30px; padding: 0 10px; font-size: 0.72rem; font-weight: 600;">
@@ -251,28 +193,17 @@ function renderApp(container = routineContainer || document.getElementById('app'
           </button>
         </div>
       </div>
-      <div id="spotify-embed-container" style="margin-top: 8px; display: ${isSpotifyAudio() ? 'block' : 'none'};">
-        <iframe 
-          id="spotify-embed-frame"
-          style="border-radius: 12px; border: none;"
-          src="https://open.spotify.com/embed/playlist/${spotifyService.getActivePlaylistId()}?utm_source=generator&theme=0" 
-          width="100%" 
-          height="80" 
-          frameBorder="0" 
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
-          loading="lazy"
-        ></iframe>
-      </div>
+      <div id="spotify-embed-container" style="margin-top: 8px; display: ${music.source === SOURCE.EMBED ? 'block' : 'none'};"></div>
     </div>
 
     <!-- Overall Session Progress Bar (Bottom) -->
     <div class="bottom-timeline-wrapper" style="margin-top: 14px; margin-bottom: 12px;">
       <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 4px;">
         <span>Routine Progress</span>
-        <span id="overall-time-counter">${formatTime(totalRoutineElapsedSec)} / ${formatTime(getEnabledDurationSec())}</span>
+        <span id="overall-time-counter">${formatTime(getRoutineElapsedSec())} / ${formatTime(getEnabledDurationSec())}</span>
       </div>
       <div class="overall-timeline">
-        <div class="overall-timeline-progress" id="overall-timeline-bar" style="width: ${(totalRoutineElapsedSec / Math.max(1, getEnabledDurationSec())) * 100}%;"></div>
+        <div class="overall-timeline-progress" id="overall-timeline-bar" style="width: ${(getRoutineElapsedSec() / Math.max(1, getEnabledDurationSec())) * 100}%;"></div>
       </div>
     </div>
 
@@ -304,7 +235,6 @@ function renderApp(container = routineContainer || document.getElementById('app'
 
   bindEvents();
   updateStageUI();
-  initSpotifyEmbedController();
   updateDockState();
 }
 
@@ -313,7 +243,7 @@ function updateStageUI() {
   const stageEl = document.getElementById('main-stage');
   if (!stageEl) return;
 
-  if (!isRunning) {
+  if (!session.running) {
     // Render Idle Screen
     stageEl.innerHTML = `
       <section class="idle-card">
@@ -373,13 +303,13 @@ function updateStageUI() {
             <button class="audio-tab-btn spotify-tab ${isSpotifyApp() ? 'active' : ''}" id="tab-src-spotify-app">
               <span>📱 Spotify App</span>
             </button>
-            <button class="audio-tab-btn ${settings.audioSource === 'ambient' ? 'active' : ''}" id="tab-src-ambient">
+            <button class="audio-tab-btn ${music.source === 'ambient' ? 'active' : ''}" id="tab-src-ambient">
               <span>🟣 Ambient</span>
             </button>
             <button class="audio-tab-btn ${isSpotifyEmbed() ? 'active' : ''}" id="tab-src-spotify-embed">
               <span>🌐 Web Mini</span>
             </button>
-            <button class="audio-tab-btn ${settings.audioSource === 'silent' ? 'active' : ''}" id="tab-src-silent">
+            <button class="audio-tab-btn ${music.source === 'silent' ? 'active' : ''}" id="tab-src-silent">
               <span>⚪ Silent</span>
             </button>
           </div>
@@ -391,7 +321,7 @@ function updateStageUI() {
               <div style="font-size: 0.82rem; font-weight: 700; color: #fff;">
                 📱 Full Songs via Spotify App
               </div>
-              <a href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="btn-open-spotify-inline">
+              <a href="${music.playlist.uri}" target="_blank" rel="noopener noreferrer" class="btn-open-spotify-inline">
                 Open in Spotify & Play ↗
               </a>
             </div>
@@ -401,22 +331,22 @@ function updateStageUI() {
           </div>
         ` : ''}
 
-        ${settings.audioSource === 'ambient' ? `
+        ${music.source === 'ambient' ? `
           <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 18px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <span style="font-size: 0.78rem; font-weight: 700; color: #c4b5fd;">Select Ambient Soundscape:</span>
               <span style="font-size: 0.7rem; color: #a5b4fc; background: rgba(139,92,246,0.2); padding: 2px 6px; border-radius: 4px;">Ducks during voice</span>
             </div>
             <div style="display: flex; gap: 6px;">
-              <button class="day-chip ${settings.ambientSound === 'drone' ? 'active' : ''}" id="btn-amb-choice-drone" style="flex: 1; padding: 8px 4px;">
+              <button class="day-chip ${music.ambientSound === 'drone' ? 'active' : ''}" id="btn-amb-choice-drone" style="flex: 1; padding: 8px 4px;">
                 <span class="day-chip-name">432Hz Om</span>
                 <span class="day-chip-state" style="font-size: 0.74rem;">Sleep Drone</span>
               </button>
-              <button class="day-chip ${settings.ambientSound === 'rain' ? 'active' : ''}" id="btn-amb-choice-rain" style="flex: 1; padding: 8px 4px;">
+              <button class="day-chip ${music.ambientSound === 'rain' ? 'active' : ''}" id="btn-amb-choice-rain" style="flex: 1; padding: 8px 4px;">
                 <span class="day-chip-name">Night Rain</span>
                 <span class="day-chip-state" style="font-size: 0.74rem;">Rainfall</span>
               </button>
-              <button class="day-chip ${settings.ambientSound === 'bowls' ? 'active' : ''}" id="btn-amb-choice-bowls" style="flex: 1; padding: 8px 4px;">
+              <button class="day-chip ${music.ambientSound === 'bowls' ? 'active' : ''}" id="btn-amb-choice-bowls" style="flex: 1; padding: 8px 4px;">
                 <span class="day-chip-name">Zen Bowls</span>
                 <span class="day-chip-state" style="font-size: 0.74rem;">Harmonics</span>
               </button>
@@ -452,46 +382,12 @@ function updateStageUI() {
 
     document.getElementById('btn-start-routine').addEventListener('click', startRoutine);
 
-    // Audio source tab listeners (seamless, without wiping the page)
-    document.getElementById('tab-src-spotify-app')?.addEventListener('click', () => {
-      settings.audioSource = 'spotify-app';
-      audioEngine.stopAmbient();
-      if (spotifyEmbedController) {
-        try { spotifyEmbedController.pause(); } catch (_) {}
-      }
-      updateDockState();
-      updateStageUI();
-    });
-    document.getElementById('tab-src-ambient')?.addEventListener('click', () => {
-      settings.audioSource = 'ambient';
-      if (spotifyEmbedController) {
-        try { spotifyEmbedController.pause(); } catch (_) {}
-      }
-      spotifyService.pause();
-      updateDockState();
-      updateStageUI();
-    });
-    document.getElementById('tab-src-spotify-embed')?.addEventListener('click', () => {
-      settings.audioSource = 'spotify-embed';
-      audioEngine.stopAmbient();
-      updateDockState();
-      updateStageUI();
-    });
-    document.getElementById('tab-src-silent')?.addEventListener('click', () => {
-      settings.audioSource = 'silent';
-      audioEngine.stopAmbient();
-      if (spotifyEmbedController) {
-        try { spotifyEmbedController.pause(); } catch (_) {}
-      }
-      spotifyService.pause();
-      updateDockState();
-      updateStageUI();
-    });
+    bindAudioSourceTabs();
 
     // Ambient choices listeners
     ['drone', 'rain', 'bowls'].forEach(soundType => {
       document.getElementById(`btn-amb-choice-${soundType}`)?.addEventListener('click', () => {
-        settings.ambientSound = soundType;
+        music.setAmbientSound(soundType);
         updateStageUI();
       });
     });
@@ -504,7 +400,7 @@ function updateStageUI() {
         return;
       }
       enabledPhases[phaseKey] = !enabledPhases[phaseKey];
-      flattenedSteps = buildFlattenedSteps(activeRoutine);
+      rebuildSteps();
       renderApp();
     };
 
@@ -526,12 +422,12 @@ function updateStageUI() {
 
   } else {
     // Render Active Workout Screen (Compact, Single-Screen Mobile Layout)
-    const currentStep = flattenedSteps[currentStepIndex];
+    const currentStep = session.steps[session.stepIndex];
     if (!currentStep) return;
 
     const currentPhase = currentStep.phase;
     const currentEx = currentStep.exercise;
-    const nextStep = flattenedSteps[currentStepIndex + 1];
+    const nextStep = session.steps[session.stepIndex + 1];
     const upcomingEx = nextStep ? nextStep.exercise : null;
     const isRest = currentStep.isRest;
 
@@ -542,11 +438,11 @@ function updateStageUI() {
 
     const phaseClass = currentPhase.id; // 'strength', 'mobility', 'windDown'
     const phaseColor = currentPhase.color;
-    const hasMorePhases = flattenedSteps.slice(currentStepIndex + 1).some(s => s.phaseIndex !== currentStep.phaseIndex);
+    const hasMorePhases = session.steps.slice(session.stepIndex + 1).some(s => s.phaseIndex !== currentStep.phaseIndex);
 
     // SVG Circle Calculations for Compact Duo Timer
     const circumference = 2 * Math.PI * TIMER_RADIUS;
-    const progressFraction = (currentStep.duration - intervalRemainingSec) / currentStep.duration;
+    const progressFraction = (currentStep.duration - session.remainingSec) / currentStep.duration;
     const strokeDashoffset = circumference - (progressFraction * circumference);
 
     stageEl.innerHTML = `
@@ -587,7 +483,7 @@ function updateStageUI() {
               ></circle>
             </svg>
             <div class="compact-timer-inner">
-              <div class="compact-timer-digits" id="timer-display">${intervalRemainingSec}</div>
+              <div class="compact-timer-digits" id="timer-display">${session.remainingSec}</div>
               <div class="compact-timer-status" style="color: ${isRest ? '#38bdf8' : phaseColor};">
                 ${isRest ? 'BREATHE' : 'HOLD'}
               </div>
@@ -669,8 +565,8 @@ function updateStageUI() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
           </button>
 
-          <button id="btn-play-pause" class="compact-btn compact-btn-main" title="${isPaused ? 'Resume' : 'Pause'}">
-            ${isPaused ? `
+          <button id="btn-play-pause" class="compact-btn compact-btn-main" title="${session.paused ? 'Resume' : 'Pause'}">
+            ${session.paused ? `
               <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             ` : `
               <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
@@ -691,13 +587,13 @@ function updateStageUI() {
         <div class="compact-timeline-strip">
           <div class="compact-timeline-labels">
             <span>Routine Progress</span>
-            <span id="overall-time-counter">${formatTime(totalRoutineElapsedSec)} / ${formatTime(getEnabledDurationSec())}</span>
+            <span id="overall-time-counter">${formatTime(getRoutineElapsedSec())} / ${formatTime(getEnabledDurationSec())}</span>
           </div>
           <div class="compact-timeline-bar-bg">
             <div 
               id="overall-timeline-bar" 
               class="compact-timeline-bar-fill" 
-              style="width: ${(totalRoutineElapsedSec / Math.max(1, getEnabledDurationSec())) * 100}%;"
+              style="width: ${(getRoutineElapsedSec() / Math.max(1, getEnabledDurationSec())) * 100}%;"
             ></div>
           </div>
         </div>
@@ -712,429 +608,138 @@ function updateStageUI() {
   }
 }
 
-// Helper to update the phase pills highlight without recreating the DOM
-function updatePhasePills() {
-  const pills = document.querySelectorAll('.phase-pill');
-  pills.forEach((pill, idx) => {
-    pill.classList.toggle('current-phase', isRunning && currentPhaseIndex === idx);
+// Idle-screen audio source tabs (re-render only the stage, never the whole shell)
+function bindAudioSourceTabs() {
+  const tabs = {
+    'tab-src-spotify-app': SOURCE.APP,
+    'tab-src-ambient': SOURCE.AMBIENT,
+    'tab-src-spotify-embed': SOURCE.EMBED,
+    'tab-src-silent': SOURCE.SILENT
+  };
+  Object.entries(tabs).forEach(([id, source]) => {
+    document.getElementById(id)?.addEventListener('click', async () => {
+      await music.setSource(source);
+      updateDockState();
+      updateStageUI();
+    });
   });
 }
 
-// Helper to update persistent dock appearance and controls
+// Helper to update the phase pills highlight without recreating the DOM
+function updatePhasePills() {
+  document.querySelectorAll('.phase-pill').forEach((pill, idx) => {
+    pill.classList.toggle('current-phase', session.running && session.currentStep?.phaseIndex === idx);
+  });
+}
+
+function renderWakeBadge() {
+  const badge = document.getElementById('wake-lock-badge');
+  if (badge) badge.textContent = wakeLockService.isActive ? 'Screen Awake' : '';
+}
+
+// Helper to update the persistent dock appearance and controls
 function updateDockState() {
   const dock = document.getElementById('spotify-player-dock');
   if (!dock) return;
 
-  if (isSpotifyApp() || isSpotifyEmbed()) {
-    dock.classList.remove('hidden');
-    dock.style.display = 'block';
-  } else {
-    dock.classList.add('hidden');
-    dock.style.display = 'none';
-  }
+  const showDock = music.isSpotify;
+  dock.classList.toggle('hidden', !showDock);
+  dock.style.display = showDock ? 'block' : 'none';
 
-  const embedContainer = document.getElementById('spotify-embed-container');
-  if (embedContainer) {
-    embedContainer.style.display = isSpotifyAudio() ? 'block' : 'none';
-  }
+  const embedHost = document.getElementById('spotify-embed-container');
+  if (embedHost) embedHost.style.display = isSpotifyEmbed() ? 'block' : 'none';
+  syncEmbedMount(embedHost);
+
+  const titleEl = document.getElementById('spotify-dock-title');
+  if (titleEl) titleEl.textContent = music.playlist.name;
 
   const statusEl = document.getElementById('spotify-dock-status');
-  if (statusEl) {
-    if (isSpotifyApp()) {
-      statusEl.textContent = isRunning 
-        ? (isPaused ? '⏸ Routine Paused • Spotify in Background' : '📱 Routine Active • Spotify Playing in Background')
-        : '📱 Spotify App Mode • Full Songs via Background App';
-    } else {
-      statusEl.textContent = isRunning 
-        ? (isPaused ? '⏸ Paused' : '▶ Playing In-Browser Bedtime Music') 
-        : 'In-Browser Player Ready';
-    }
-  }
+  if (statusEl) statusEl.textContent = music.statusText(session.running, session.paused);
 
   const btnPause = document.getElementById('btn-dock-play-pause');
   if (btnPause) {
-    btnPause.style.display = (isRunning && isSpotifyAudio()) ? 'inline-flex' : 'none';
-    btnPause.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+    btnPause.style.display = (session.running && music.canRemoteControl) ? 'inline-flex' : 'none';
+    btnPause.textContent = session.paused ? '▶ Resume' : '⏸ Pause';
   }
+
+  const btnShuffle = document.getElementById('btn-dock-shuffle');
+  if (btnShuffle) btnShuffle.style.display = canShuffle() ? 'inline-flex' : 'none';
 
   const btnOpenApp = document.getElementById('btn-dock-open-app');
-  if (btnOpenApp) {
-    btnOpenApp.href = spotifyService.getRandomAppDeepLink();
+  if (btnOpenApp) btnOpenApp.href = music.playlist.uri;
+}
+
+// Keep the Spotify iframe in step with the dock: mounted only in embed mode, and
+// re-mounted whenever renderApp() replaced the host element.
+function syncEmbedMount(host) {
+  const wanted = isSpotifyEmbed() && host;
+  if (wanted && music.embedHost !== host) {
+    music.mountEmbed(host);
+  } else if (!wanted && (music.embedHost || music.embed)) {
+    music.mountEmbed(null);
   }
 }
 
-// Initialize Spotify Iframe API Controller once
-function initSpotifyEmbedController() {
-  const container = document.getElementById('spotify-embed-container');
-  if (!container) return;
+// ---------------------------------------------------------------------------
+// Session callbacks (timer cues, step transitions, completion)
+// ---------------------------------------------------------------------------
 
-  const mount = (IFrameAPI) => {
-    if (spotifyEmbedController) return;
+function handleTick(sec, step) {
+  updateTimerDisplay(sec, step);
+  updateTimelineProgress();
 
-    const options = {
-      uri: spotifyService.getActivePlaylist().uri,
-      width: '100%',
-      height: '80',
-      theme: '0'
-    };
-
-    IFrameAPI.createController(container, options, (EmbedController) => {
-      spotifyEmbedController = EmbedController;
-      console.log('[Nocturne] Spotify EmbedController connected!');
-
-      EmbedController.addListener('ready', () => {
-        console.log('[Nocturne] Spotify Embed ready for playback');
-        if (pendingSpotifyPlay && isRunning && isSpotifyAudio()) {
-          EmbedController.play();
-          pendingSpotifyPlay = false;
-        }
-      });
-
-      EmbedController.addListener('playback_update', e => {
-        if (e && e.data) {
-          const isPlaying = !e.data.isPaused;
-          const statusEl = document.getElementById('spotify-dock-status');
-          if (statusEl && isRunning) {
-            statusEl.textContent = isPlaying ? '▶ Playing Bedtime Music' : (isPaused ? '⏸ Paused' : 'Ready');
-          }
-        }
-      });
-
-      if (pendingSpotifyPlay && isRunning && isSpotifyAudio()) {
-        EmbedController.play();
-        pendingSpotifyPlay = false;
+  if (!step.isRest) {
+    if (step.duration > 25 && sec === Math.floor(step.duration / 2)) {
+      audioEngine.playHalfwayDing();
+    }
+    if (sec === 10) {
+      const next = session.steps[session.stepIndex + 1];
+      if (next) {
+        audioEngine.speak(`10 seconds left. Up next: ${next.isRest ? 'Rest' : next.exercise.name}.`);
       }
-    });
-  };
+    }
+  }
 
-  if (window.SpotifyIframeApi) {
-    mount(window.SpotifyIframeApi);
-  } else {
-    window.onSpotifyIframeApiReady = (IFrameAPI) => {
-      window.SpotifyIframeApi = IFrameAPI;
-      mount(IFrameAPI);
-    };
+  if (sec >= 1 && sec <= 3) {
+    audioEngine.playCountdownBeep(sec);
   }
 }
 
-// Start the 30-Minute Routine
-async function startRoutine() {
-  audioEngine.ensureContext();
-  await wakeLockService.requestLock();
+function handleStepChange(step, prev, reason) {
+  const phaseChanged = !prev || prev.phaseIndex !== step.phaseIndex;
 
-  // Reset indices
-  currentStepIndex = 0;
-  totalRoutineElapsedSec = 0;
-  const initialStep = flattenedSteps[0];
-  intervalRemainingSec = initialStep.duration;
-  currentPhaseIndex = initialStep.phaseIndex;
+  if (reason === 'restart') {
+    audioEngine.playChime('start');
+  } else if (reason === 'skip-phase') {
+    audioEngine.playPhaseGong();
+    audioEngine.speak(`Skipping to ${step.phase.title}. First exercise: ${step.exercise.name}.`, true);
+  } else if (phaseChanged) {
+    audioEngine.playPhaseGong();
+    audioEngine.speak(`Phase complete. Welcome to ${step.phase.title}. ${step.phase.description}`, true);
+  } else if (step.isRest) {
+    const upcoming = session.steps[session.stepIndex + 1];
+    audioEngine.playChime('complete');
+    audioEngine.speak(`Rest and breathe. Up next: ${upcoming?.exercise?.name || 'the next exercise'}.`, true);
+  } else {
+    audioEngine.playChime('start');
+    audioEngine.speak(`Start: ${step.exercise.name}.`, true);
+  }
 
-  isRunning = true;
-  isPaused = false;
+  if (phaseChanged && reason !== 'restart') {
+    music.onPhaseChange(step.phase.id);
+  }
 
-  // Sound & Speech Cues
-  audioEngine.playChime('start');
-  audioEngine.speak(`Welcome to tonight's bedtime routine. Starting with ${initialStep.phase.title}. First exercise: ${initialStep.exercise.name}.`, true);
-
-  // Update UI into active state WITHOUT tearing down the Spotify dock!
-  document.body.classList.add('routine-active');
+  // Update stage/pills/dock WITHOUT re-rendering the app shell, so music is never interrupted
   updateStageUI();
   updatePhasePills();
   updateDockState();
-
-  // Background Audio / Spotify
-  if (isSpotifyAudio()) {
-    audioEngine.stopAmbient();
-    
-    // 1. Play via Web API Connect if authorized (with shuffle enabled and random track offset)
-    if (spotifyService.isConnected()) {
-      spotifyService.play(spotifyService.getActivePlaylist().uri, true).catch(e => console.warn('Spotify connect error:', e));
-    }
-
-    // 2. Play via In-App Spotify Embed Controller (shuffle to a random track)
-    if (spotifyEmbedController) {
-      try { 
-        const randomTrack = spotifyService.getRandomTrackUri();
-        if (randomTrack && typeof spotifyEmbedController.loadUri === 'function') {
-          spotifyEmbedController.loadUri(randomTrack);
-        }
-        spotifyEmbedController.play(); 
-      } catch (e) {
-        console.warn('Embed play error:', e);
-      }
-    } else {
-      pendingSpotifyPlay = true;
-      const frame = document.querySelector('#spotify-embed-container iframe') || document.getElementById('spotify-embed-frame');
-      if (frame && frame.src && !frame.src.includes('autoplay=1')) {
-        frame.src = `${frame.src}${frame.src.includes('?') ? '&' : '?'}autoplay=1`;
-      }
-    }
-  } else if (settings.audioSource === 'ambient') {
-    audioEngine.startAmbient(settings.ambientSound);
-  } else {
-    audioEngine.stopAmbient();
-  }
-
-  runTimerLoop();
-}
-
-// Primary Timer Loop (1-second tick)
-function runTimerLoop() {
-  if (timerInterval) clearInterval(timerInterval);
-
-  timerInterval = setInterval(() => {
-    if (isPaused) return;
-
-    intervalRemainingSec--;
-    totalRoutineElapsedSec++;
-
-    // Update bottom overall bar & accurate remaining timer
-    updateTimelineProgress();
-
-    const currentStep = flattenedSteps[currentStepIndex];
-    if (!currentStep) return;
-
-    // Update digits & circle progress
-    const digits = document.getElementById('timer-display');
-    if (digits) digits.textContent = intervalRemainingSec;
-
-    const ring = document.getElementById('timer-progress-ring');
-    if (ring) {
-      const circumference = 2 * Math.PI * TIMER_RADIUS;
-      const frac = (currentStep.duration - intervalRemainingSec) / currentStep.duration;
-      ring.style.strokeDashoffset = circumference - (frac * circumference);
-    }
-
-    // Audio Cues during interval
-    // Halfway mark
-    if (!currentStep.isRest && intervalRemainingSec === Math.floor(currentStep.duration / 2) && currentStep.duration > 25) {
-      audioEngine.playHalfwayDing();
-    }
-
-    // 10-second transition preview
-    if (!currentStep.isRest && intervalRemainingSec === 10) {
-      const nextStep = flattenedSteps[currentStepIndex + 1];
-      if (nextStep) {
-        const nextName = nextStep.isRest ? 'Rest' : nextStep.exercise.name;
-        audioEngine.speak(`10 seconds left. Up next: ${nextName}.`);
-      }
-    }
-
-    // 3-2-1 Countdown Beeps
-    if (intervalRemainingSec <= 3 && intervalRemainingSec >= 1) {
-      audioEngine.playCountdownBeep(intervalRemainingSec);
-    }
-
-    // Step Complete!
-    if (intervalRemainingSec <= 0) {
-      advanceStep();
-    }
-  }, 1000);
-}
-
-// Synchronize remaining time, elapsed time, and bottom timeline progress bar
-function updateTimelineProgress() {
-  const totalSec = Math.max(1, getEnabledDurationSec());
-  const elapsedSec = getRoutineElapsedSec();
-  const remainingSec = getRoutineRemainingSec();
-
-  const bars = document.querySelectorAll('#overall-timeline-bar');
-  bars.forEach(bar => {
-    bar.style.width = `${Math.min(100, (elapsedSec / totalSec) * 100)}%`;
-  });
-
-  const timeCounts = document.querySelectorAll('#overall-time-counter');
-  timeCounts.forEach(tc => {
-    tc.textContent = `${formatTime(elapsedSec)} / ${formatTime(totalSec)}`;
-  });
-
-  const totalRemainingEls = document.querySelectorAll('#timer-total-remaining-display');
-  totalRemainingEls.forEach(el => {
-    el.textContent = `${formatTime(remainingSec)} left`;
-  });
-}
-
-// Move to next exercise or rest step (preserves continuous Spotify audio stream)
-function advanceStep() {
-  currentStepIndex++;
-
-  if (currentStepIndex >= flattenedSteps.length) {
-    completeRoutine();
-    return;
-  }
-
-  const newStep = flattenedSteps[currentStepIndex];
-  intervalRemainingSec = newStep.duration;
-
-  // Check if phase changed (Strength -> Mobility -> WindDown)
-  const prevStep = flattenedSteps[currentStepIndex - 1];
-  const phaseChanged = prevStep && prevStep.phaseIndex !== newStep.phaseIndex;
-  currentPhaseIndex = newStep.phaseIndex;
-
-  if (phaseChanged) {
-    audioEngine.playPhaseGong();
-    audioEngine.speak(`Phase complete. Welcome to ${newStep.phase.title}. ${newStep.phase.description}`, true);
-
-    // If mobility or wind-down started, smoothly adapt Spotify playlist to matching bedtime vibe
-    if (isSpotifyApp() || isSpotifyEmbed()) {
-      const nextPlaylist = newStep.phase.id === 'windDown' ? CURATED_PLAYLISTS[2] : (newStep.phase.id === 'mobility' ? CURATED_PLAYLISTS[1] : null);
-      if (nextPlaylist) {
-        if (isSpotifyEmbed() && spotifyEmbedController) {
-          try {
-            spotifyEmbedController.loadUri(nextPlaylist.uri);
-            spotifyEmbedController.play();
-          } catch (_) {}
-        }
-        if (spotifyService.isConnected()) {
-          spotifyService.play(nextPlaylist.uri);
-        }
-        const titleEl = document.getElementById('spotify-dock-title');
-        if (titleEl) titleEl.textContent = nextPlaylist.name;
-      }
-    }
-  } else {
-    if (newStep.isRest) {
-      audioEngine.playChime('complete');
-      const upcoming = flattenedSteps[currentStepIndex + 1];
-      const upName = upcoming?.exercise?.name ? upcoming.exercise.name : 'the next exercise';
-      audioEngine.speak(`Rest and breathe. Up next: ${upName}.`, false);
-    } else {
-      audioEngine.playChime('start');
-      audioEngine.speak(`Start: ${newStep.exercise.name}.`, true);
-    }
-  }
-
-  // Update stage and phase badges WITHOUT re-rendering app shell (Spotify keeps playing!)
-  updateStageUI();
-  updatePhasePills();
   updateTimelineProgress();
 }
 
-function skipToNextStep() {
-  advanceStep();
-}
-
-function goToPreviousStep() {
-  if (currentStepIndex > 0) {
-    currentStepIndex = Math.max(0, currentStepIndex - 1);
-    const newStep = flattenedSteps[currentStepIndex];
-    intervalRemainingSec = newStep.duration;
-    currentPhaseIndex = newStep.phaseIndex;
-    updateStageUI();
-    updatePhasePills();
-    updateTimelineProgress();
-  }
-}
-
-// Skip entire current phase and jump directly to next section
-function skipCurrentPhase() {
-  const currentStep = flattenedSteps[currentStepIndex];
-  if (!currentStep) return;
-  const currentPIdx = currentStep.phaseIndex;
-
-  const nextPhaseStepIndex = flattenedSteps.findIndex((step, idx) => idx > currentStepIndex && step.phaseIndex !== currentPIdx);
-
-  if (nextPhaseStepIndex !== -1) {
-    currentStepIndex = nextPhaseStepIndex;
-    const newStep = flattenedSteps[currentStepIndex];
-    intervalRemainingSec = newStep.duration;
-    currentPhaseIndex = newStep.phaseIndex;
-
-    audioEngine.playPhaseGong();
-    audioEngine.speak(`Skipping to ${newStep.phase.title}. First exercise: ${newStep.exercise.name}.`, true);
-
-    updateStageUI();
-    updatePhasePills();
-    updateTimelineProgress();
-  } else {
-    completeRoutine();
-  }
-}
-
-function togglePause() {
-  isPaused = !isPaused;
-  if (isPaused) {
-    audioEngine.stopSpeech();
-    if (isSpotifyAudio() && spotifyEmbedController) {
-      try { spotifyEmbedController.pause(); } catch (_) {}
-    }
-    if (spotifyService.isConnected()) {
-      spotifyService.pause();
-    }
-    if (settings.audioSource === 'ambient') {
-      audioEngine.stopAmbient();
-    }
-  } else {
-    if (isSpotifyAudio()) {
-      if (spotifyEmbedController) {
-        try { spotifyEmbedController.play(); } catch (_) {}
-      }
-      if (spotifyService.isConnected()) {
-        spotifyService.play();
-      }
-    }
-    if (settings.audioSource === 'ambient') {
-      audioEngine.startAmbient(settings.ambientSound);
-    }
-  }
-  updateStageUI();
-  updateDockState();
-}
-
-function confirmStopRoutine() {
-  openModal(`
-    <div style="text-align: center; padding: 18px 10px;">
-      <div style="font-size: 2.2rem; margin-bottom: 12px;">🌙</div>
-      <h3 style="font-family: var(--font-heading); font-size: 1.35rem; font-weight: 700; color: #fff; margin-bottom: 8px;">End Routine Early?</h3>
-      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.45;">
-        You've completed ${formatTime(getRoutineElapsedSec())} of your ${getEnabledDurationMin()}-minute evening session. Would you like to resume or wrap up?
-      </p>
-      <div style="display: flex; gap: 12px;">
-        <button id="btn-cancel-stop" class="btn-primary-start" style="flex: 1; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); color: #fff; font-size: 0.95rem; padding: 14px 10px;">
-          Resume Routine
-        </button>
-        <button id="btn-confirm-stop" class="btn-primary-start" style="flex: 1; background: #ef4444; color: #fff; font-size: 0.95rem; padding: 14px 10px;">
-          End Session
-        </button>
-      </div>
-    </div>
-  `);
-
-  document.getElementById('btn-cancel-stop')?.addEventListener('click', closeModal);
-  document.getElementById('btn-confirm-stop')?.addEventListener('click', () => {
-    closeModal();
-    stopRoutine();
-  });
-}
-
-function stopRoutine() {
-  if (timerInterval) clearInterval(timerInterval);
-  isRunning = false;
-  isPaused = false;
-  document.body.classList.remove('routine-active');
-  audioEngine.stopAmbient();
-  audioEngine.stopSpeech();
-  if (spotifyEmbedController) {
-    try { spotifyEmbedController.pause(); } catch (_) {}
-  }
-  spotifyService.pause();
-  wakeLockService.releaseLock();
-  updateStageUI();
-  updatePhasePills();
-  updateDockState();
-}
-
-// Routine Completed Celebration!
-function completeRoutine() {
-  if (timerInterval) clearInterval(timerInterval);
-  isRunning = false;
-  isPaused = false;
-  document.body.classList.remove('routine-active');
+function handleComplete() {
+  endSession();
   audioEngine.playPhaseGong();
-  audioEngine.stopAmbient();
-  wakeLockService.releaseLock();
 
-  // Blast celebratory bedtime confetti
   try {
     confetti({
       particleCount: 80,
@@ -1163,6 +768,130 @@ function completeRoutine() {
     closeModal();
     renderApp();
   });
+}
+
+// ---------------------------------------------------------------------------
+// Live DOM updates
+// ---------------------------------------------------------------------------
+
+function updateTimerDisplay(sec, step) {
+  const digits = document.getElementById('timer-display');
+  if (digits) digits.textContent = sec;
+
+  const ring = document.getElementById('timer-progress-ring');
+  if (ring) {
+    const circumference = 2 * Math.PI * TIMER_RADIUS;
+    const frac = (step.duration - sec) / step.duration;
+    ring.style.strokeDashoffset = circumference - (frac * circumference);
+  }
+}
+
+// Synchronize remaining time, elapsed time, and bottom timeline progress bar
+function updateTimelineProgress() {
+  const totalSec = Math.max(1, getEnabledDurationSec());
+  const elapsedSec = getRoutineElapsedSec();
+  const remainingSec = getRoutineRemainingSec();
+
+  document.querySelectorAll('#overall-timeline-bar').forEach(bar => {
+    bar.style.width = `${Math.min(100, (elapsedSec / totalSec) * 100)}%`;
+  });
+  document.querySelectorAll('#overall-time-counter').forEach(el => {
+    el.textContent = `${formatTime(elapsedSec)} / ${formatTime(totalSec)}`;
+  });
+  document.querySelectorAll('#timer-total-remaining-display').forEach(el => {
+    el.textContent = `${formatTime(remainingSec)} left`;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Transport
+// ---------------------------------------------------------------------------
+
+function startRoutine() {
+  if (session.running || isStarting) return;
+  isStarting = true;
+  try {
+    // Audio + speech must be primed synchronously inside the tap (iOS/Safari autoplay rules)
+    audioEngine.ensureContext();
+    audioEngine.voiceEnabled = settings.voiceEnabled;
+    audioEngine.soundEffectsEnabled = settings.soundEffectsEnabled;
+
+    if (!session.start()) return;
+    const first = session.currentStep;
+
+    document.body.classList.add('routine-active');
+    audioEngine.playChime('start');
+    audioEngine.speak(`Welcome to tonight's bedtime routine. Starting with ${first.phase.title}. First exercise: ${first.exercise.name}.`, true);
+
+    updateStageUI();
+    updatePhasePills();
+    updateDockState();
+
+    wakeLockService.requestLock().then(renderWakeBadge);
+    music.start().catch(e => console.warn('Music start error:', e));
+  } finally {
+    isStarting = false;
+  }
+}
+
+function togglePause() {
+  if (!session.running) return;
+  if (session.paused) {
+    session.resume();
+    music.resume();
+  } else {
+    session.pause();
+    audioEngine.stopSpeech();
+    music.pause();
+  }
+  updateStageUI();
+  updateDockState();
+}
+
+function skipToNextStep() { session.next(); }
+function goToPreviousStep() { session.prev(); }
+function skipCurrentPhase() { session.skipPhase(); }
+
+function confirmStopRoutine() {
+  openModal(`
+    <div style="text-align: center; padding: 18px 10px;">
+      <div style="font-size: 2.2rem; margin-bottom: 12px;">🌙</div>
+      <h3 style="font-family: var(--font-heading); font-size: 1.35rem; font-weight: 700; color: #fff; margin-bottom: 8px;">End Routine Early?</h3>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.45;">
+        You've completed ${formatTime(getRoutineElapsedSec())} of your ${getEnabledDurationMin()}-minute evening session. Would you like to resume or wrap up?
+      </p>
+      <div style="display: flex; gap: 12px;">
+        <button id="btn-cancel-stop" class="btn-primary-start" style="flex: 1; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); color: #fff; font-size: 0.95rem; padding: 14px 10px;">
+          Resume Routine
+        </button>
+        <button id="btn-confirm-stop" class="btn-primary-start" style="flex: 1; background: #ef4444; color: #fff; font-size: 0.95rem; padding: 14px 10px;">
+          End Session
+        </button>
+      </div>
+    </div>
+  `);
+
+  document.getElementById('btn-cancel-stop')?.addEventListener('click', closeModal);
+  document.getElementById('btn-confirm-stop')?.addEventListener('click', () => {
+    closeModal();
+    stopRoutine();
+  });
+}
+
+// Tear down everything a running session owns (timer, voice, music, screen lock). No DOM.
+function endSession() {
+  session.stop();
+  document.body.classList.remove('routine-active');
+  audioEngine.stopSpeech();
+  music.stop();
+  wakeLockService.releaseLock().then(renderWakeBadge);
+}
+
+function stopRoutine() {
+  endSession();
+  updateStageUI();
+  updatePhasePills();
+  updateDockState();
 }
 
 // Modal System
@@ -1203,15 +932,12 @@ function closeModal() {
 // Bind Global Navigation & Modal Triggers
 function bindEvents() {
   // Day Selector
-  document.querySelectorAll('.day-chip').forEach(chip => {
+  document.querySelectorAll('.day-chip[data-day]').forEach(chip => {
     chip.addEventListener('click', () => {
       const dayIdx = parseInt(chip.getAttribute('data-day'), 10);
-      currentDayIndex = dayIdx;
+      if (session.running) stopRoutine();
       activeRoutine = getRoutineForDay(dayIdx);
-      flattenedSteps = buildFlattenedSteps(activeRoutine);
-      if (isRunning) {
-        stopRoutine();
-      }
+      rebuildSteps();
       renderApp();
     });
   });
@@ -1271,7 +997,7 @@ function bindEvents() {
               <div class="spotify-playlist-desc">${p.description}</div>
             </div>
             <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-              <a href="${p.uri}" target="_blank" class="btn-open-spotify-inline" style="padding: 5px 10px; font-size: 0.72rem;">
+              <a href="${p.uri}" target="_blank" rel="noopener noreferrer" class="btn-open-spotify-inline" style="padding: 5px 10px; font-size: 0.72rem;">
                 Open App ↗
               </a>
               <span style="font-size: 0.75rem; font-weight: 600; color: var(--spotify-green); border: 1px solid rgba(29, 185, 84, 0.4); padding: 4px 8px; border-radius: 999px;">
@@ -1291,7 +1017,7 @@ function bindEvents() {
         </p>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
-          <a href="${spotifyService.getActivePlaylist().uri}" target="_blank" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.82rem; background: var(--spotify-green); color: #000; font-weight: 700; text-decoration: none; justify-content: center;">
+          <a href="${music.playlist.uri}" target="_blank" rel="noopener noreferrer" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.82rem; background: var(--spotify-green); color: #000; font-weight: 700; text-decoration: none; justify-content: center;">
             📱 1. Open Active Playlist in Spotify App & Press Play ↗
           </a>
           <button id="btn-select-app-mode" class="btn-primary-start" style="padding: 10px 14px; font-size: 0.8rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); justify-content: center;">
@@ -1309,15 +1035,15 @@ function bindEvents() {
           Free procedural bedtime frequencies generated directly in-app. Volume drops to 15% during voice commands.
         </p>
         <div style="display: flex; gap: 8px;">
-          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'drone' ? 'active' : ''}" id="btn-ambient-drone" style="flex: 1;">
+          <button class="day-chip ${music.source === 'ambient' && music.ambientSound === 'drone' ? 'active' : ''}" id="btn-ambient-drone" style="flex: 1;">
             <span class="day-chip-name">432Hz Om</span>
             <span class="day-chip-state">Drone</span>
           </button>
-          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'rain' ? 'active' : ''}" id="btn-ambient-rain" style="flex: 1;">
+          <button class="day-chip ${music.source === 'ambient' && music.ambientSound === 'rain' ? 'active' : ''}" id="btn-ambient-rain" style="flex: 1;">
             <span class="day-chip-name">Night Rain</span>
             <span class="day-chip-state">Rainfall</span>
           </button>
-          <button class="day-chip ${settings.audioSource === 'ambient' && settings.ambientSound === 'bowls' ? 'active' : ''}" id="btn-ambient-bowls" style="flex: 1;">
+          <button class="day-chip ${music.source === 'ambient' && music.ambientSound === 'bowls' ? 'active' : ''}" id="btn-ambient-bowls" style="flex: 1;">
             <span class="day-chip-name">Zen Bowls</span>
             <span class="day-chip-state">Harmonics</span>
           </button>
@@ -1347,7 +1073,7 @@ function bindEvents() {
             type="text" 
             id="input-spotify-client-id" 
             placeholder="Paste Spotify Client ID here" 
-            value="${spotifyService.clientId}"
+            value="${escapeHtml(spotifyService.clientId)}"
             style="flex: 1; background: #070a12; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px 12px; color: #fff; font-size: 0.82rem;"
           />
           <button id="btn-save-client-id" class="icon-btn" style="width: auto; padding: 0 14px; font-size: 0.8rem; font-weight: 600;">Save</button>
@@ -1370,12 +1096,8 @@ function bindEvents() {
     openModal(html, 'Bedtime Music & Audio Hub');
 
     // Button to set Spotify App Mode
-    document.getElementById('btn-select-app-mode')?.addEventListener('click', () => {
-      settings.audioSource = 'spotify-app';
-      audioEngine.stopAmbient();
-      if (spotifyEmbedController) {
-        try { spotifyEmbedController.pause(); } catch (_) {}
-      }
+    document.getElementById('btn-select-app-mode')?.addEventListener('click', async () => {
+      await music.setSource(SOURCE.APP, { playNow: isLive() });
       closeModal();
       updateDockState();
       updateStageUI();
@@ -1385,33 +1107,7 @@ function bindEvents() {
     document.querySelectorAll('.spotify-playlist-card').forEach(card => {
       card.addEventListener('click', async (e) => {
         if (e.target.closest('a')) return; // Allow direct link to open
-        const uri = card.getAttribute('data-uri');
-        spotifyService.setPlaylistUri(uri);
-        const p = spotifyService.getActivePlaylist();
-
-        const titleEl = document.getElementById('spotify-dock-title');
-        if (titleEl) titleEl.textContent = p.name;
-
-        if (isSpotifyEmbed()) {
-          if (spotifyEmbedController) {
-            try {
-              spotifyEmbedController.loadUri(uri);
-              if (isRunning && !isPaused) {
-                spotifyEmbedController.play();
-              }
-            } catch (_) {}
-          } else {
-            const frame = document.querySelector('#spotify-embed-container iframe') || document.getElementById('spotify-embed-frame');
-            if (frame) {
-              frame.src = `https://open.spotify.com/embed/playlist/${p.spotifyId}?utm_source=generator&theme=0${isRunning && !isPaused ? '&autoplay=1' : ''}`;
-            }
-          }
-        }
-
-        if (spotifyService.isConnected() && isRunning && !isPaused) {
-          await spotifyService.play(uri);
-        }
-
+        await music.selectPlaylist(card.getAttribute('data-uri'), { playNow: isLive() });
         closeModal();
         updateDockState();
         updateStageUI();
@@ -1454,16 +1150,10 @@ function bindEvents() {
 
     // Ambient Buttons
     ['drone', 'rain', 'bowls'].forEach(soundType => {
-      document.getElementById(`btn-ambient-${soundType}`)?.addEventListener('click', () => {
-        settings.audioSource = 'ambient';
-        settings.ambientSound = soundType;
-        if (spotifyEmbedController) {
-          try { spotifyEmbedController.pause(); } catch (_) {}
-        }
-        spotifyService.pause();
-        if (isRunning && !isPaused) {
-          audioEngine.startAmbient(soundType);
-        }
+      document.getElementById(`btn-ambient-${soundType}`)?.addEventListener('click', async () => {
+        music.setAmbientSound(soundType);
+        await music.setSource(SOURCE.AMBIENT);
+        if (isLive()) await music.start();
         closeModal();
         updateDockState();
         updateStageUI();
@@ -1476,26 +1166,17 @@ function bindEvents() {
   document.getElementById('btn-dock-change-playlist')?.addEventListener('click', openMusicHub);
   document.getElementById('btn-dock-play-pause')?.addEventListener('click', togglePause);
   document.getElementById('btn-dock-shuffle')?.addEventListener('click', async () => {
-    if (spotifyService.isConnected()) {
-      await spotifyService.play(spotifyService.getActivePlaylist().uri, true);
-    }
-    if (spotifyEmbedController) {
-      const track = spotifyService.getRandomTrackUri();
-      if (track && typeof spotifyEmbedController.loadUri === 'function') {
-        spotifyEmbedController.loadUri(track);
-      }
-      try { spotifyEmbedController.play(); } catch (_) {}
-    }
+    const ok = await music.shuffle();
     const statusEl = document.getElementById('spotify-dock-status');
     if (statusEl) {
-      statusEl.textContent = '🔀 Shuffled track';
+      statusEl.textContent = ok ? '🔀 Shuffled track' : '⚠️ Could not reach Spotify';
       setTimeout(updateDockState, 1800);
     }
   });
 
   // Install & Sideload Guide Modal
   document.getElementById('btn-install-guide')?.addEventListener('click', async () => {
-    const networkUrl = 'http://147.83.70.119:5173';
+    const networkUrl = window.location.origin;
     let qrDataUrl = '';
     try {
       qrDataUrl = await QRCode.toDataURL(networkUrl, {
@@ -1510,7 +1191,7 @@ function bindEvents() {
     const html = `
       <div class="install-step-card" style="text-align: center;">
         <h4 style="justify-content: center; font-size: 1rem;">📲 Open on Your Android Phone</h4>
-        <p style="font-size: 0.82rem; margin-top: 4px;">Make sure your phone is connected to the same Wi-Fi network, then scan with your phone camera:</p>
+        <p style="font-size: 0.82rem; margin-top: 4px;">Scan with your phone camera to open AndiNú on your phone:</p>
         
         ${qrDataUrl ? `
           <div class="qr-code-box">
@@ -1562,24 +1243,33 @@ function bindEvents() {
   });
 
 }
- 
-export function mountRoutine(container) {
+
+// ---------------------------------------------------------------------------
+// Mount / unmount
+// ---------------------------------------------------------------------------
+
+export async function mountRoutine(container) {
   routineContainer = container;
+  activeRoutine = getRoutineForDay(new Date().getDay());
+  rebuildSteps();
+
+  audioEngine.voiceEnabled = settings.voiceEnabled;
+  audioEngine.soundEffectsEnabled = settings.soundEffectsEnabled;
+  music.onStatusChange = updateDockState;
+  wakeLockService.onChange = renderWakeBadge;
+
+  // Let a pending Spotify OAuth redirect finish so the first render shows the right login state
+  await spotifyService.ready;
+  if (routineContainer !== container) return; // navigated away while waiting
+
   renderApp(container);
 }
 
 export function unmountRoutine() {
-  if (isRunning) {
-    try { pauseTimer(); } catch (_) {}
-  }
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
-  try {
-    wakeLockService.release();
-  } catch (_) {}
-  try {
-    audioEngine.stopAmbient();
-  } catch (_) {}
+  routineContainer = null;
+  endSession();
+  music.destroyEmbed();
+  music.onStatusChange = null;
+  wakeLockService.onChange = null;
+  audioEngine.stopAmbient();
 }

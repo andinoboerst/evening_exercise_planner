@@ -748,12 +748,17 @@ export async function mountQuotes(container, navigate) {
   }
 
   // Close reaction picker on outside click
-  document.addEventListener('click', (e) => {
+  const onDocumentClick = (e) => {
+    if (!container.isConnected) {
+      document.removeEventListener('click', onDocumentClick);
+      return;
+    }
     if (activePickerQuoteId && !e.target.closest('.reaction-picker-anchor')) {
       activePickerQuoteId = null;
       render();
     }
-  });
+  };
+  document.addEventListener('click', onDocumentClick);
 
   await loadData();
   render();

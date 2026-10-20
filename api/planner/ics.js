@@ -13,29 +13,61 @@ function escapeICalText(str = '') {
     .replace(/\r?\n/g, '\\n');
 }
 
-function toICalDateTime(dateObj, timeStr = '00:00:00') {
-  const [h, m, s = 0] = timeStr.split(':').map(Number);
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// Floating local time (no Z / TZID): calendar clients show it at the same wall-clock
+// time wherever they are. The serverless host runs in UTC, so never go through UTC getters.
+function toICalLocalDateTime(dateObj, timeStr = '00:00:00') {
+  const [h = 0, m = 0, s = 0] = String(timeStr).split(':').map(Number);
   const d = new Date(dateObj);
   d.setHours(h, m, s, 0);
+  return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+}
 
-  const pad = (n) => String(n).padStart(2, '0');
-  const year = d.getUTCFullYear();
-  const month = pad(d.getUTCMonth() + 1);
-  const day = pad(d.getUTCDate());
-  const hours = pad(d.getUTCHours());
-  const minutes = pad(d.getUTCMinutes());
-  const seconds = pad(d.getUTCSeconds());
+// DTSTAMP must be UTC
+function toICalUtcStamp(d) {
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
+}
 
-  return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+// RFC 5545: lines longer than 75 octets must be folded
+function foldLine(line) {
+  if (line.length <= 73) return line;
+  const parts = [];
+  let rest = line;
+  parts.push(rest.slice(0, 73));
+  rest = rest.slice(73);
+  while (rest.length > 0) {
+    parts.push(' ' + rest.slice(0, 72));
+    rest = rest.slice(72);
+  }
+  return parts.join('\r\n');
 }
 
 function toICalDateOnly(dateStr) {
   return dateStr.replace(/-/g, '');
 }
 
+// UNTIL must match DTSTART's value type (DATE for all-day, floating DATE-TIME otherwise)
+function untilClause(ev) {
+  const d = toICalDateOnly(ev.recurrence_end_date);
+  return ev.is_all_day ? `;UNTIL=${d}` : `;UNTIL=${d}T235959`;
+}
+
+// EXDATE must use the same value type as DTSTART, otherwise clients ignore the exclusion
+function exdateLine(ev) {
+  if (ev.is_all_day) {
+    return `EXDATE;VALUE=DATE:${ev.excluded_dates.map(toICalDateOnly).join(',')}`;
+  }
+  const times = ev.excluded_dates.map(ds => {
+    const [y, m, d] = ds.split('-').map(Number);
+    return toICalLocalDateTime(new Date(y, m - 1, d), ev.start_time || '09:00:00');
+  });
+  return `EXDATE:${times.join(',')}`;
+}
+
 export function buildIcsString(data) {
   const now = new Date();
-  const dtstamp = toICalDateTime(now);
+  const dtstamp = toICalUtcStamp(now);
   const settings = data?.settings || {};
   const defaults = data?.defaults || [];
   const dayPlans = data?.day_plans || [];
@@ -81,8 +113,8 @@ export function buildIcsString(data) {
     } else {
       const [y, m, d] = ev.event_date.split('-').map(Number);
       const dateObj = new Date(y, m - 1, d);
-      lines.push(`DTSTART:${toICalDateTime(dateObj, ev.start_time || '09:00:00')}`);
-      lines.push(`DTEND:${toICalDateTime(dateObj, ev.end_time || '10:00:00')}`);
+      lines.push(`DTSTART:${toICalLocalDateTime(dateObj, ev.start_time || '09:00:00')}`);
+      lines.push(`DTEND:${toICalLocalDateTime(dateObj, ev.end_time || '10:00:00')}`);
     }
 
     if (ev.recurrence_type === 'weekly' && Array.isArray(ev.recurrence_days) && ev.recurrence_days.length > 0) {
@@ -90,35 +122,32 @@ export function buildIcsString(data) {
       const byDays = ev.recurrence_days.map(d => dayMap[d]).filter(Boolean).join(',');
       let rrule = `RRULE:FREQ=WEEKLY;BYDAY=${byDays}`;
       if (ev.recurrence_end_date) {
-        rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
+        rrule += untilClause(ev);
       }
       lines.push(rrule);
 
       if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.length > 0) {
-        const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
-        lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
+        lines.push(exdateLine(ev));
       }
     } else if (ev.recurrence_type === 'monthly') {
       let rrule = 'RRULE:FREQ=MONTHLY';
       if (ev.recurrence_end_date) {
-        rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
+        rrule += untilClause(ev);
       }
       lines.push(rrule);
 
       if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.length > 0) {
-        const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
-        lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
+        lines.push(exdateLine(ev));
       }
     } else if (ev.recurrence_type === 'annually') {
       let rrule = 'RRULE:FREQ=YEARLY';
       if (ev.recurrence_end_date) {
-        rrule += `;UNTIL=${toICalDateOnly(ev.recurrence_end_date)}T235959Z`;
+        rrule += untilClause(ev);
       }
       lines.push(rrule);
 
       if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.length > 0) {
-        const exdateStr = ev.excluded_dates.map(toICalDateOnly).join(',');
-        lines.push(`EXDATE;VALUE=DATE:${exdateStr}`);
+        lines.push(exdateLine(ev));
       }
     }
 
@@ -152,10 +181,10 @@ export function buildIcsString(data) {
     const bedtime = (override?.bedtime || def?.bedtime || '23:00').slice(0, 5);
     const wakeTime = (override?.wake_time || def?.wake_time || '07:30').slice(0, 5);
 
-    const bedDateTime = toICalDateTime(cur, `${bedtime}:00`);
+    const bedDateTime = toICalLocalDateTime(cur, `${bedtime}:00`);
     const nextCur = new Date(cur);
     nextCur.setDate(nextCur.getDate() + 1);
-    const wakeDateTime = toICalDateTime(nextCur, `${wakeTime}:00`);
+    const wakeDateTime = toICalLocalDateTime(nextCur, `${wakeTime}:00`);
 
     let desc = `Target Bedtime: ${bedtime}\nMorning Alarm: ${wakeTime}`;
     if (override?.my_wake_time || def?.my_wake_time) desc += `\n🌱 Andi: ${(override?.my_wake_time || def?.my_wake_time).slice(0, 5)}`;
@@ -184,7 +213,7 @@ export function buildIcsString(data) {
   }
 
   lines.push('END:VCALENDAR');
-  return lines.join('\r\n');
+  return lines.map(foldLine).join('\r\n') + '\r\n';
 }
 
 function sendText(res, status, body, contentType = 'text/plain; charset=utf-8', extraHeaders = {}) {

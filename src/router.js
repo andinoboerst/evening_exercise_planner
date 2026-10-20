@@ -33,6 +33,7 @@ class AppRouter {
   constructor() {
     this.currentPath = window.location.pathname;
     this.currentViewCleanup = null;
+    this.routeToken = 0;
     this.appEl = document.getElementById('app');
 
     window.addEventListener('popstate', () => {
@@ -41,13 +42,15 @@ class AppRouter {
   }
 
   navigate(path) {
-    if (this.currentPath === path && path !== '/routine') return;
+    if (this.currentPath === path) return;
     window.history.pushState({}, '', path);
     this.handleRoute(path);
   }
 
   async handleRoute(path) {
     this.currentPath = path;
+    // Ignore results of an older navigation if a newer one started while awaiting auth
+    const token = ++this.routeToken;
 
     // Apply scoped theme to body immediately
     applyRouteTheme(path);
@@ -91,6 +94,7 @@ class AppRouter {
     // Non-destructive auth check: Wait for cookies and storage hydration
     await waitForAuthReady();
     const user = await getCurrentUser();
+    if (token !== this.routeToken) return;
 
     // Dual-state Root Homepage (/)
     if (path === '/' || path === '') {
