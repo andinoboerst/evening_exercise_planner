@@ -1,227 +1,162 @@
-// Music controller for the routine: one place that knows how each audio source
-// starts, pauses, resumes and stops, so the view never juggles players itself.
+// Background music for the routine, hands-free: it starts with the session, dips while the coach
+// speaks, softens as the session winds down, and fades out at the end.
+//
+// Tracks are hour-long CC0 ambient mixes ("Calm Pills" by Alaeddin Hallak / Uplifting Pills)
+// streamed from the Internet Archive. If a stream can't load, a generated soundscape takes over so
+// the routine is never silent by accident. The generated soundscapes live in audioEngine.
 import { audioEngine } from '../audio/audioEngine.js';
-import { spotifyService, CURATED_PLAYLISTS } from '../services/spotify.js';
 
-export const SOURCE = {
-  APP: 'spotify-app',       // user plays full songs in the Spotify app (optionally remote-controlled via Web API)
-  EMBED: 'spotify-embed',   // in-browser Spotify iframe (30s previews unless logged in)
-  AMBIENT: 'ambient',       // procedural soundscapes from the audio engine
-  SILENT: 'silent'
-};
+const ARCHIVE = 'https://archive.org/download/CalmPills/';
 
-// Playlist the music moves to when a phase begins (strength keeps the user's pick)
-const PHASE_PLAYLIST = { mobility: 'evening_acoustic', windDown: 'ambient_sleep' };
+export const TRACKS = [
+  { id: 'still-habitat', label: 'Still Habitat', file: 'Uplifting_Pills_-_Calm_Pill_1_-_Still_Habitat.mp3' },
+  { id: 'peaceful-moments', label: 'Peaceful Moments', file: 'Uplifting_Pills_-_Calm_Pill_8_-_Peaceful_Moments_471CF124-5255-4D81-9243-5D7DE89702AD.mp3' },
+  { id: 'safest-place', label: 'The Safest Place', file: 'Uplifting_Pills_-_Calm_Pill_4_-_The_Safest_Place_E7398A89-465A-46D4-AC1F-4D9A2015DEE1.mp3' },
+  { id: 'quiet-peace', label: 'Quiet Peace', file: 'Uplifting_Pills_-_Calm_Pill_56_-_Quiet_Peace.mp3' },
+  { id: 'lullaby', label: 'Lullaby for Grownups', file: 'Uplifting_Pills_-_Calm_Pill_3_-_Lullaby_for_Grownups_462868CD-0AE8-469D-B460-63696B597AF7.mp3' },
+  { id: 'place-to-rest', label: 'Place to Rest My Head', file: 'Uplifting_Pills_-_Calm_Pill_43_-_Place_to_Rest_My_Head.mp3' }
+];
 
-function whenIframeApi() {
-  return new Promise(resolve => {
-    if (window.SpotifyIframeApi) return resolve(window.SpotifyIframeApi);
-    window.addEventListener('spotify-iframe-api-ready', () => resolve(window.SpotifyIframeApi), { once: true });
-  });
-}
+// Generated fallbacks and alternatives (no network needed)
+export const SOUNDSCAPES = [
+  { id: 'rain', label: 'Rain' },
+  { id: 'bowls', label: 'Singing bowls' },
+  { id: 'drone', label: 'Soft drone' },
+  { id: 'silence', label: 'Off' }
+];
+
+export const DEFAULT_MUSIC = TRACKS[0].id;
+export const isValidMusic = (id) => TRACKS.some(t => t.id === id) || SOUNDSCAPES.some(s => s.id === id);
+
+// Track level per phase: a little more present while moving, quietest at the end
+const PHASE_LEVEL = { strength: 0.5, stretch: 0.4, wind: 0.3 };
+const DUCKED_FACTOR = 0.25;
 
 class MusicController {
   constructor() {
-    this.source = SOURCE.APP;
-    this.ambientSound = 'drone';
-    this.phasePlaylist = null; // temporary, session-only override set by phase changes
-    this.embed = null;
-    this.embedHost = null;
-    this._mountToken = 0;
-    this._pendingEmbedPlay = false;
-    this.onStatusChange = null;
+    this.audio = null;
+    this.gain = null;
+    this.source = null;
+    this.level = PHASE_LEVEL.strength;
+    this.ducked = false;
+    this.mode = 'silence';
+    this.usingGenerated = false;
 
-    // Duck the Spotify app volume with the coach's voice (ambient ducks itself in the engine).
-    // The embed iframe has no volume control, so only the Web API path is ducked.
-    audioEngine.onDuck = (isDucking) => {
-      if (this.source === SOURCE.APP && spotifyService.isConnected()) {
-        spotifyService.duck(isDucking);
-      }
-    };
+    audioEngine.onDuck = (isDucking) => this.duck(isDucking);
   }
 
-  get isSpotify() {
-    return this.source === SOURCE.APP || this.source === SOURCE.EMBED;
+  get isTrack() {
+    return Boolean(this.audio);
   }
 
-  get playlist() {
-    return this.phasePlaylist || spotifyService.getActivePlaylist();
-  }
+  /** Must be called from a user gesture (the Start press) so playback is allowed */
+  start(mode) {
+    this.stop(0);
+    this.mode = mode;
+    if (mode === 'silence') return;
 
-  /** Can the dock's pause/resume button actually control playback? */
-  get canRemoteControl() {
-    return this.source === SOURCE.EMBED || (this.source === SOURCE.APP && spotifyService.isConnected());
-  }
+    const track = TRACKS.find(t => t.id === mode);
+    if (!track) return this._startGenerated(mode);
 
-  // --- embed lifecycle -------------------------------------------------------
+    try {
+      const ctx = audioEngine.ensureContext();
+      const audio = new Audio();
+      audio.crossOrigin = 'anonymous';
+      audio.loop = true;
+      audio.preload = 'auto';
+      audio.src = ARCHIVE + encodeURIComponent(track.file);
 
-  /** (Re)mount the iframe controller into hostEl. Pass null to tear it down. */
-  async mountEmbed(hostEl) {
-    this.destroyEmbed();
-    this.embedHost = hostEl;
-    if (this.source !== SOURCE.EMBED || !hostEl) return;
+      // Routing through Web Audio gives volume control on every device (iOS ignores audio.volume)
+      const source = ctx.createMediaElementSource(audio);
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      source.connect(gain);
+      gain.connect(audioEngine.masterGain);
 
-    const token = ++this._mountToken;
-    // createController *replaces* the element it is given, so give it a throwaway child
-    const slot = document.createElement('div');
-    hostEl.replaceChildren(slot);
+      audio.addEventListener('error', () => this._fallBack(audio));
+      this.audio = audio;
+      this.source = source;
+      this.gain = gain;
+      this.usingGenerated = false;
 
-    const api = await whenIframeApi();
-    if (token !== this._mountToken) return;
-
-    api.createController(slot, { uri: this.playlist.uri, width: '100%', height: '80', theme: '0' }, (controller) => {
-      if (token !== this._mountToken) {
-        try { controller.destroy(); } catch (_) {}
-        return;
-      }
-      this.embed = controller;
-      controller.addListener('ready', () => {
-        if (this._pendingEmbedPlay) {
-          this._pendingEmbedPlay = false;
-          try { controller.play(); } catch (_) {}
-        }
-      });
-      controller.addListener('playback_update', () => this.onStatusChange?.());
-    });
-  }
-
-  destroyEmbed() {
-    this._mountToken++; // invalidates any in-flight mount
-    if (this.embed) {
-      try { this.embed.destroy(); } catch (_) {}
-      this.embed = null;
+      audio.play().then(() => this._ramp(this._target(), 3)).catch(() => this._fallBack(audio));
+    } catch (e) {
+      console.warn('Music start error:', e);
+      this._startGenerated('drone');
     }
-    this.embedHost?.replaceChildren();
-    this.embedHost = null;
   }
 
-  // --- transport -------------------------------------------------------------
+  _startGenerated(mode) {
+    this.usingGenerated = true;
+    audioEngine.startAmbient(mode);
+  }
 
-  async start() {
-    switch (this.source) {
-      case SOURCE.APP:
-        if (spotifyService.isConnected()) await spotifyService.play(this.playlist.uri, true);
-        break;
-      case SOURCE.EMBED:
-        this._playEmbed();
-        break;
-      case SOURCE.AMBIENT:
-        audioEngine.startAmbient(this.ambientSound);
-        break;
-    }
+  /** The stream failed: keep the routine from going silent */
+  _fallBack(audio) {
+    if (audio !== this.audio) return;
+    this._teardownTrack();
+    this._startGenerated('drone');
+  }
+
+  _target() {
+    return this.level * (this.ducked ? DUCKED_FACTOR : 1);
+  }
+
+  _ramp(value, seconds) {
+    if (!this.gain) return;
+    const now = audioEngine.ctx.currentTime;
+    const g = this.gain.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(Math.max(0.0001, g.value), now);
+    g.exponentialRampToValueAtTime(Math.max(0.0001, value), now + seconds);
+  }
+
+  setPhase(phaseId) {
+    this.level = PHASE_LEVEL[phaseId] ?? this.level;
+    if (this.isTrack && !this.audio.paused) this._ramp(this._target(), 4);
+  }
+
+  duck(isDucking) {
+    this.ducked = isDucking;
+    if (this.isTrack && !this.audio.paused) this._ramp(this._target(), isDucking ? 0.25 : 0.8);
   }
 
   pause() {
-    switch (this.source) {
-      case SOURCE.APP:
-        if (spotifyService.isConnected()) spotifyService.pause();
-        break;
-      case SOURCE.EMBED:
-        this._pendingEmbedPlay = false;
-        try { this.embed?.pause(); } catch (_) {}
-        break;
-      case SOURCE.AMBIENT:
-        audioEngine.stopAmbient();
-        break;
+    if (this.isTrack) this.audio.pause();
+    else if (this.usingGenerated) audioEngine.ctx?.suspend();
+  }
+
+  resume() {
+    if (this.isTrack) {
+      audioEngine.ensureContext();
+      this.audio.play().catch(() => {});
+    } else if (this.usingGenerated) {
+      audioEngine.ensureContext();
     }
   }
 
-  async resume() {
-    switch (this.source) {
-      case SOURCE.APP:
-        if (spotifyService.isConnected()) await spotifyService.resume();
-        break;
-      case SOURCE.EMBED:
-        try { this.embed?.resume(); } catch (_) {}
-        break;
-      case SOURCE.AMBIENT:
-        audioEngine.startAmbient(this.ambientSound);
-        break;
-    }
-  }
-
-  /** End of session: silence everything and forget phase overrides */
-  stop() {
-    this.pause();
-    this.phasePlaylist = null;
-  }
-
-  _playEmbed() {
-    if (this.embed) {
-      try { this.embed.play(); } catch (e) { console.warn('Embed play error:', e); }
+  stop(fadeSec = 1.5) {
+    if (this.isTrack && fadeSec > 0) {
+      this._ramp(0.0001, fadeSec);
+      const audio = this.audio;
+      setTimeout(() => { if (audio === this.audio) this._teardownTrack(); }, fadeSec * 1000 + 100);
     } else {
-      this._pendingEmbedPlay = true; // played as soon as the controller reports ready
+      this._teardownTrack();
     }
+    audioEngine.stopAmbient();
+    this.usingGenerated = false;
   }
 
-  // --- configuration ---------------------------------------------------------
-
-  /** Switch source; silences the old one and optionally starts the new one right away */
-  async setSource(source, { playNow = false } = {}) {
-    if (source !== this.source) {
-      this.pause();
-      this.source = source;
-    }
-    if (playNow) await this.start();
-  }
-
-  async setAmbientSound(sound, { playNow = false } = {}) {
-    this.ambientSound = sound;
-    if (playNow && this.source === SOURCE.AMBIENT) audioEngine.startAmbient(sound);
-  }
-
-  async selectPlaylist(uri, { playNow = false } = {}) {
-    spotifyService.setPlaylistUri(uri);
-    this.phasePlaylist = null;
-    if (this.source === SOURCE.EMBED && this.embed) {
-      try {
-        this.embed.loadUri(uri);
-        if (playNow) this.embed.play();
-      } catch (_) {}
-    } else if (this.source === SOURCE.APP && playNow && spotifyService.isConnected()) {
-      await spotifyService.play(uri, true);
-    }
-  }
-
-  /** Move to the phase's playlist when we can really switch it. Returns the playlist or null. */
-  onPhaseChange(phaseId) {
-    const target = CURATED_PLAYLISTS.find(p => p.id === PHASE_PLAYLIST[phaseId]);
-    if (!target || target.uri === this.playlist.uri) return null;
-
-    if (this.source === SOURCE.EMBED && this.embed) {
-      try {
-        this.embed.loadUri(target.uri);
-        this.embed.play();
-      } catch (_) { return null; }
-    } else if (this.source === SOURCE.APP && spotifyService.isConnected()) {
-      spotifyService.play(target.uri, true);
-    } else {
-      return null; // the user's own Spotify app keeps playing what they chose
-    }
-    this.phasePlaylist = target;
-    return target;
-  }
-
-  /** Restart on a fresh random song (Web API only; the embed cannot shuffle) */
-  async shuffle() {
-    if (this.source === SOURCE.APP && spotifyService.isConnected()) {
-      return spotifyService.play(this.playlist.uri, true);
-    }
-    return false;
-  }
-
-  statusText(running, paused) {
-    if (this.source === SOURCE.APP) {
-      if (!running) return spotifyService.isConnected()
-        ? '📱 Spotify Connected • Starts with the routine'
-        : '📱 Spotify App Mode • Play it in the app, then start';
-      if (paused) return '⏸ Routine Paused';
-      return spotifyService.isConnected()
-        ? '📱 Routine Active • Playing via Spotify'
-        : '📱 Routine Active • Spotify playing in the app';
-    }
-    if (!running) return 'In-Browser Player Ready';
-    return paused ? '⏸ Paused' : '▶ Playing In-Browser Bedtime Music';
+  _teardownTrack() {
+    if (!this.audio) return;
+    try {
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.audio.load();
+      this.source?.disconnect();
+      this.gain?.disconnect();
+    } catch (_) { /* already gone */ }
+    this.audio = this.source = this.gain = null;
   }
 }
 

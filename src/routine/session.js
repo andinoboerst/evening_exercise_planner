@@ -1,29 +1,10 @@
 // Routine session: a DOM-free, audio-free timer state machine.
-// The view reacts to the callbacks; this module only knows about steps and time.
+// The view reacts to the callbacks; this module only knows about steps (see generator.js) and time.
 //
 // Timing is deadline-based (performance.now), not a counted setInterval, so
 // throttled/backgrounded tabs and slow ticks never make the routine drift.
 
 const TICK_MS = 250;
-
-// Flatten the enabled phases of a routine into work/rest steps
-export function buildSteps(routine, enabledPhases) {
-  const steps = [];
-  routine.phases.forEach((phase, phaseIndex) => {
-    if (!enabledPhases[phase.id]) return;
-    phase.exercises.forEach((exercise, exerciseIndex) => {
-      steps.push({ phaseIndex, exerciseIndex, isRest: false, duration: exercise.duration, phase, exercise });
-      if (exercise.rest > 0) {
-        steps.push({ phaseIndex, exerciseIndex, isRest: true, duration: exercise.rest, phase, exercise });
-      }
-    });
-  });
-  return steps;
-}
-
-export function totalDurationSec(steps) {
-  return steps.reduce((acc, step) => acc + step.duration, 0);
-}
 
 export class RoutineSession {
   /**
@@ -50,7 +31,7 @@ export class RoutineSession {
   }
 
   get totalSec() {
-    return totalDurationSec(this.steps);
+    return this.steps.reduce((acc, step) => acc + step.duration, 0);
   }
 
   get remainingMs() {

@@ -36,7 +36,7 @@ export function mountTermsOfService(container, navigate) {
             AndiNú is a personal and household web application designed to help partners and families organize daily routines and mutual activities:
           </p>
           <ul>
-            <li><strong>Nighttime Routine Guide:</strong> Daily mat exercise timers, stretching cues, wind-down tracking, and Spotify audio integration.</li>
+            <li><strong>Nighttime Routine Guide:</strong> Daily mat exercise timers, stretching cues, wind-down guidance, and calming background sound.</li>
             <li><strong>Meal Prep, Pantry & Smart Weekly Planner:</strong> Recipe management, on-hand pantry ingredient tracking, weekly meal scheduling, and dynamic shopping lists with live pantry synchronization.</li>
             <li><strong>Shared Checkbox Collections:</strong> Collaborative lists for movies to watch, vinyl records to buy, and travel destinations.</li>
           </ul>

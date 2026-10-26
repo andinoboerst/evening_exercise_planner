@@ -76,6 +76,15 @@ class AppRouter {
       return;
     }
 
+    // The routine is public so a TV browser can run it without signing in
+    if (path === '/routine') {
+      this.appEl.innerHTML = '';
+      mountRoutine(this.appEl, (p) => this.navigate(p));
+      this.currentViewCleanup = () => unmountRoutine();
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
+
     // Public login route
     if (path === '/login') {
       this.appEl.innerHTML = '';
@@ -122,7 +131,7 @@ class AppRouter {
       return;
     }
 
-    // Protected Routes (/routine, /meals, /lists)
+    // Protected Routes (/meals, /lists, ...)
     if (!user) {
       this.navigate('/login');
       return;
@@ -148,10 +157,7 @@ class AppRouter {
     this.appEl.appendChild(dock);
     setupNavEvents((p) => this.navigate(p));
 
-    if (path === '/routine') {
-      mountRoutine(viewContainer);
-      this.currentViewCleanup = () => unmountRoutine();
-    } else if (path === '/meals') {
+    if (path === '/meals') {
       mountMeals(viewContainer, (p) => this.navigate(p));
     } else if (path === '/lists') {
       mountLists(viewContainer, (p) => this.navigate(p));

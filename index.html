@@ -21,19 +21,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Patrick+Hand&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
 
     <title>AndiNú — Private Household Suite • andinu.cc</title>
-    <script>
-      // The Web Playback SDK calls this global the moment it loads; it must already exist
-      window.onSpotifyWebPlaybackSDKReady = function () {
-        window.dispatchEvent(new Event('spotify-sdk-ready'));
-      };
-      // Must exist before the (async) embed API loads, otherwise its ready callback is missed
-      window.onSpotifyIframeApiReady = function (api) {
-        window.SpotifyIframeApi = api;
-        window.dispatchEvent(new Event('spotify-iframe-api-ready'));
-      };
-    </script>
-    <script src="https://sdk.scdn.co/spotify-player.js"></script>
-    <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
   </head>
   <body>
     <div id="app"></div>

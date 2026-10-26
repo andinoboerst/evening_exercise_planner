@@ -210,7 +210,7 @@ export async function mountDashboard(container, navigate) {
           </div>
           <div class="card-body">
             <h2 class="card-title">Nighttime Routine</h2>
-            <p class="card-desc">30-min couples mat workout: 10m strength, 15m mobility, and 5m wind-down with curated music.</p>
+            <p class="card-desc">A guided 30-minute mat routine for two: strength, stretching and a 5-minute wind-down, with voice and calm sound. Works on the TV too.</p>
           </div>
           <div class="card-footer">
             <span class="card-action-label">Start Tonight's Routine</span>
@@ -606,11 +606,11 @@ export function mountPublicHome(container, navigate) {
             </div>
             <h3 class="feature-title">Nighttime Routine Guide</h3>
             <p class="feature-desc">
-              Personal wind-down checklists and evening habit tracking. Features a structured 30-minute couples mat routine broken into 10 minutes of strength, 15 minutes of deep mobility/stretching, and 5 minutes of mindful wind-down, accompanied by synchronized Spotify playlists.
+              Personal wind-down checklists and evening habit tracking. Features a guided 30-minute couples mat routine: 10 minutes of strength, 15 minutes of stretching, and a 5-minute mindful wind-down, with voice guidance and calming background sound.
             </p>
             <ul class="feature-bullets">
               <li>Interval exercise timers with audio cues</li>
-              <li>Customizable routine sequences and phases</li>
+              <li>A fresh, balanced session every night</li>
               <li>Evening wind-down and relaxation tracking</li>
             </ul>
           </article>
