@@ -6,6 +6,7 @@ import {
   generateUUID
 } from '../services/supabase.js';
 import { escapeHtml } from '../utils/escapeHtml.js';
+import { resizeImage, blobToDataUrl } from '../utils/images.js';
 
 const BUCKET = 'journal-images';
 const STORAGE_ENTRIES_KEY = 'andinu_cache_journal';
@@ -14,41 +15,6 @@ const AUTHORS = [
   { id: 'Núria', label: 'Núria 💗' },
   { id: 'Andino', label: 'Andino 🧉' }
 ];
-
-// Downscale a photo so uploads stay small and the handwriting scan stays under API limits
-function resizeImage(file, maxSide = 1600, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        blob => (blob ? resolve(blob) : reject(new Error('Could not process image'))),
-        'image/jpeg',
-        quality
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Could not read that image'));
-    };
-    img.src = url;
-  });
-}
-
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
 
 function todayISO() {
   const d = new Date();
@@ -202,7 +168,7 @@ export async function mountJournal(container, navigate) {
       <div id="journal-modal" class="modal-backdrop" style="display: flex;">
         <div class="modal-dialog glass-panel journal-modal-dialog">
           <div class="modal-header">
-            <h3>${m.id ? '✏️ Edit entry' : '💌 New entry'}</h3>
+            <h3>${m.id ? '✏️ Edit letter' : '💌 New letter'}</h3>
             <button id="journal-close" class="modal-close" aria-label="Close">&times;</button>
           </div>
           <form id="journal-form" class="modal-body">
@@ -254,7 +220,7 @@ export async function mountJournal(container, navigate) {
             ${m.error ? `<p class="journal-error">${escapeHtml(m.error)}</p>` : ''}
 
             <button type="submit" class="quotes-primary-action-btn" style="margin-top: 20px; width: 100%;" ${m.saving || m.scanning ? 'disabled' : ''}>
-              ${m.saving ? 'Saving…' : m.id ? 'Save changes' : '💌 Add to journal'}
+              ${m.saving ? 'Saving…' : m.id ? 'Save changes' : '💌 Save letter'}
             </button>
           </form>
         </div>
@@ -269,8 +235,8 @@ export async function mountJournal(container, navigate) {
       <div class="journal-view-shell">
         <div class="journal-header">
           <div>
-            <div class="journal-tag-pill">💌 Journal</div>
-            <h1 class="journal-title">Our Journal</h1>
+            <div class="journal-tag-pill">💌 Letters</div>
+            <h1 class="journal-title">Our Letters</h1>
             <p class="journal-subtitle">Letters, thoughts and the things we don't say out loud often enough.</p>
           </div>
           <button id="journal-new" class="quotes-primary-action-btn"><span>✒️</span> Write</button>
@@ -287,8 +253,8 @@ export async function mountJournal(container, navigate) {
           ${filtered.length ? filtered.map(renderEntry).join('') : `
             <div class="journal-empty">
               <span>💌</span>
-              <h3>Nothing here yet</h3>
-              <p>Write the first entry, or scan a note that was written by hand.</p>
+              <h3>No letters yet</h3>
+              <p>Write the first letter, or scan a note that was written by hand.</p>
             </div>`}
         </div>
 
@@ -416,7 +382,7 @@ export async function mountJournal(container, navigate) {
 
   async function deleteEntry(id) {
     const entry = entries.find(e => e.id === id);
-    if (!entry || !confirm('Delete this journal entry for good?')) return;
+    if (!entry || !confirm('Delete this letter for good?')) return;
     if (useRemote) {
       const { error } = await supabase.from('journal_entries').delete().eq('id', id);
       if (error) {

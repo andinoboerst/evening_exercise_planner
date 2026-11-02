@@ -1,0 +1,523 @@
+import {
+  getActiveHousehold,
+  supabase,
+  isSupabaseConfigured,
+  generateUUID
+} from '../services/supabase.js';
+import { escapeHtml } from '../utils/escapeHtml.js';
+import { resizeImage, blobToDataUrl } from '../utils/images.js';
+
+const BUCKET = 'journal-images';
+const STORAGE_ENTRIES_KEY = 'andinu_cache_diary';
+const AUTHORS = [
+  { id: 'Both', label: 'Both 👫' },
+  { id: 'Núria', label: 'Núria 💗' },
+  { id: 'Andino', label: 'Andino 🧉' }
+];
+
+function todayISO() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function formatDateRange(start, end) {
+  if (!start) return '';
+  const fmt = (s, opts) => new Date(`${s}T12:00:00`).toLocaleDateString(undefined, opts);
+  const full = { day: 'numeric', month: 'long', year: 'numeric' };
+  if (!end || end === start) return fmt(start, full);
+  const a = new Date(`${start}T12:00:00`);
+  const b = new Date(`${end}T12:00:00`);
+  if (a.getFullYear() === b.getFullYear()) {
+    return `${fmt(start, { day: 'numeric', month: 'long' })} – ${fmt(end, full)}`;
+  }
+  return `${fmt(start, full)} – ${fmt(end, full)}`;
+}
+
+function paragraphs(text) {
+  return String(text || '')
+    .split(/\n{2,}/)
+    .filter(p => p.trim())
+    .map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+const blockPaths = blocks => (blocks || []).filter(b => b.type === 'image' && b.path).map(b => b.path);
+
+export async function mountDiary(container, navigate) {
+  const household = await getActiveHousehold();
+  const useRemote = isSupabaseConfigured && Boolean(household?.id);
+
+  let entries = [];
+  let imageUrls = {}; // storage path -> displayable URL
+  let view = 'list'; // 'list' | 'read' | 'edit'
+  let activeId = null;
+  let draft = null;
+  let lightboxUrl = null;
+
+  // ---- Data ---------------------------------------------------------------
+
+  async function resolveImageUrls(paths) {
+    const missing = [...new Set(paths)].filter(p => p && !imageUrls[p]);
+    if (missing.length === 0) return;
+    if (!useRemote) {
+      missing.forEach(p => { imageUrls[p] = p; }); // local mode stores data URLs directly
+      return;
+    }
+    const { data } = await supabase.storage.from(BUCKET).createSignedUrls(missing, 3600);
+    (data || []).forEach(item => {
+      if (item.signedUrl) imageUrls[item.path] = item.signedUrl;
+    });
+  }
+
+  async function loadData() {
+    if (useRemote) {
+      try {
+        const { data, error } = await supabase
+          .from('diary_entries')
+          .select('*')
+          .order('start_date', { ascending: false })
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        entries = data || [];
+      } catch (err) {
+        console.warn('Error loading diary entries:', err);
+      }
+    } else {
+      try {
+        entries = JSON.parse(localStorage.getItem(STORAGE_ENTRIES_KEY) || '[]');
+      } catch {
+        entries = [];
+      }
+    }
+    await resolveImageUrls(entries.map(e => e.cover_path));
+  }
+
+  function persistLocal() {
+    try {
+      localStorage.setItem(STORAGE_ENTRIES_KEY, JSON.stringify(entries));
+    } catch (e) {
+      console.warn('Could not cache diary locally:', e);
+    }
+  }
+
+  async function uploadImage(blob) {
+    if (!useRemote) return blobToDataUrl(blob);
+    const path = `${household.id}/${generateUUID()}.jpg`;
+    const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg' });
+    if (error) throw error;
+    return path;
+  }
+
+  async function removeImages(paths) {
+    if (!useRemote || paths.length === 0) return;
+    try {
+      await supabase.storage.from(BUCKET).remove(paths);
+    } catch (e) {
+      console.warn('Could not remove diary images:', e);
+    }
+  }
+
+  // ---- Rendering: list ----------------------------------------------------
+
+  function renderList() {
+    return `
+      <div class="diary-header">
+        <div>
+          <div class="diary-tag-pill">📖 Diary</div>
+          <h1 class="diary-title">Our Diary</h1>
+          <p class="diary-subtitle">Trips, days out and everything we want to remember together.</p>
+        </div>
+        <button id="diary-new" class="diary-btn">＋ New story</button>
+      </div>
+
+      ${entries.length ? `
+        <div class="diary-grid">
+          ${entries.map(e => {
+            const cover = e.cover_path && imageUrls[e.cover_path];
+            const author = AUTHORS.find(a => a.id === e.author)?.label || e.author;
+            return `
+              <button class="diary-card" data-open="${e.id}">
+                <div class="diary-card-cover ${cover ? '' : 'no-cover'}">
+                  ${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" />` : '<span>📖</span>'}
+                </div>
+                <div class="diary-card-body">
+                  <h3>${escapeHtml(e.title)}</h3>
+                  ${e.location ? `<div class="diary-card-place">📍 ${escapeHtml(e.location)}</div>` : ''}
+                  <div class="diary-card-meta">${escapeHtml(formatDateRange(e.start_date, e.end_date))} · ${escapeHtml(author)}</div>
+                </div>
+              </button>`;
+          }).join('')}
+        </div>` : `
+        <div class="diary-empty">
+          <span>🗺️</span>
+          <h3>No stories yet</h3>
+          <p>Write about a trip or a favourite day, with photos and maps right where they belong.</p>
+        </div>`}`;
+  }
+
+  // ---- Rendering: reading -------------------------------------------------
+
+  function renderRead() {
+    const e = entries.find(x => x.id === activeId);
+    if (!e) return renderList();
+    const author = AUTHORS.find(a => a.id === e.author)?.label || e.author;
+
+    const body = (e.blocks || []).map(b => {
+      if (b.type === 'text') return `<div class="diary-text">${paragraphs(b.text)}</div>`;
+      const url = imageUrls[b.path];
+      if (!url) return '';
+      return `
+        <figure class="diary-figure ${b.kind === 'map' ? 'is-map' : ''}">
+          <button class="diary-figure-img" data-zoom="${escapeHtml(url)}">
+            <img src="${escapeHtml(url)}" alt="${escapeHtml(b.caption || (b.kind === 'map' ? 'Map' : 'Photo'))}" loading="lazy" />
+          </button>
+          ${b.caption || b.kind === 'map' ? `<figcaption>${b.kind === 'map' ? '📍 ' : ''}${escapeHtml(b.caption || 'Map')}</figcaption>` : ''}
+        </figure>`;
+    }).join('');
+
+    return `
+      <div class="diary-read-bar">
+        <button class="diary-link-btn" id="diary-back">← All stories</button>
+        <div>
+          <button class="diary-link-btn" id="diary-edit">✏️ Edit</button>
+          <button class="diary-link-btn" id="diary-delete">🗑 Delete</button>
+        </div>
+      </div>
+      <article class="diary-article">
+        <header>
+          <div class="diary-article-meta">${escapeHtml(formatDateRange(e.start_date, e.end_date))}${e.location ? ` · 📍 ${escapeHtml(e.location)}` : ''}</div>
+          <h1>${escapeHtml(e.title)}</h1>
+          <div class="diary-article-by">Written by ${escapeHtml(author)}</div>
+        </header>
+        ${body}
+      </article>`;
+  }
+
+  // ---- Rendering: editing -------------------------------------------------
+
+  function renderInserter(index) {
+    return `
+      <div class="diary-inserter">
+        <span class="diary-inserter-line"></span>
+        <button type="button" data-insert="text" data-at="${index}">＋ Text</button>
+        <button type="button" data-insert="photo" data-at="${index}">＋ Photos</button>
+        <button type="button" data-insert="map" data-at="${index}">＋ Map</button>
+        <span class="diary-inserter-line"></span>
+      </div>`;
+  }
+
+  function renderBlockEditor(b, i, total) {
+    const controls = `
+      <div class="diary-block-controls">
+        <button type="button" data-move="-1" data-at="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
+        <button type="button" data-move="1" data-at="${i}" ${i === total - 1 ? 'disabled' : ''} title="Move down">↓</button>
+        <button type="button" data-remove="${i}" title="Remove">🗑</button>
+      </div>`;
+
+    if (b.type === 'text') {
+      return `
+        <div class="diary-block">
+          ${controls}
+          <textarea class="text-input diary-block-text" data-text="${i}" rows="4" placeholder="Tell the story…">${escapeHtml(b.text)}</textarea>
+        </div>`;
+    }
+    return `
+      <div class="diary-block">
+        ${controls}
+        <div class="diary-block-image ${b.kind === 'map' ? 'is-map' : ''}">
+          <img src="${escapeHtml(b.url)}" alt="" />
+        </div>
+        <input type="text" class="text-input" data-caption="${i}" value="${escapeHtml(b.caption)}"
+          placeholder="${b.kind === 'map' ? 'Map caption, e.g. Our route on day 2' : 'Caption (optional)'}" />
+      </div>`;
+  }
+
+  function renderEdit() {
+    const d = draft;
+    return `
+      <div class="diary-read-bar">
+        <button class="diary-link-btn" id="diary-cancel">← Cancel</button>
+        <button class="diary-btn" id="diary-save" ${d.saving ? 'disabled' : ''}>${d.saving ? 'Saving…' : 'Save story'}</button>
+      </div>
+
+      <div class="diary-editor">
+        <div class="form-group">
+          <label for="diary-f-title">Title</label>
+          <input type="text" id="diary-f-title" class="text-input diary-title-input" value="${escapeHtml(d.title)}" placeholder="e.g. Three days in Lisbon" />
+        </div>
+        <div class="diary-field-row">
+          <div class="form-group">
+            <label for="diary-f-location">Where</label>
+            <input type="text" id="diary-f-location" class="text-input" value="${escapeHtml(d.location)}" placeholder="Lisbon, Portugal" />
+          </div>
+          <div class="form-group">
+            <label for="diary-f-start">From</label>
+            <input type="date" id="diary-f-start" class="text-input" value="${escapeHtml(d.start_date)}" />
+          </div>
+          <div class="form-group">
+            <label for="diary-f-end">To <span class="diary-optional">(optional)</span></label>
+            <input type="date" id="diary-f-end" class="text-input" value="${escapeHtml(d.end_date)}" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Written by</label>
+          <div class="diary-author-picker">
+            ${AUTHORS.map(a => `<button type="button" class="diary-author-btn ${d.author === a.id ? 'selected' : ''}" data-author="${a.id}">${a.label}</button>`).join('')}
+          </div>
+        </div>
+
+        <div class="diary-blocks">
+          ${renderInserter(0)}
+          ${d.blocks.map((b, i) => renderBlockEditor(b, i, d.blocks.length) + renderInserter(i + 1)).join('')}
+        </div>
+
+        ${d.error ? `<p class="diary-error">${escapeHtml(d.error)}</p>` : ''}
+      </div>`;
+  }
+
+  function render() {
+    container.innerHTML = `
+      <div class="diary-view-shell">
+        ${view === 'edit' ? renderEdit() : view === 'read' ? renderRead() : renderList()}
+        ${lightboxUrl ? `<div id="diary-lightbox" class="journal-lightbox"><img src="${escapeHtml(lightboxUrl)}" alt="" /></div>` : ''}
+      </div>`;
+    attachEvents();
+    if (view === 'edit') container.querySelectorAll('.diary-block-text').forEach(autoGrow);
+  }
+
+  function autoGrow(el) {
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, 90)}px`;
+  }
+
+  // ---- Actions ------------------------------------------------------------
+
+  const newTextBlock = (text = '') => ({ id: generateUUID(), type: 'text', text });
+
+  async function openEntry(id) {
+    activeId = id;
+    const e = entries.find(x => x.id === id);
+    await resolveImageUrls(blockPaths(e?.blocks));
+    view = 'read';
+    render();
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  async function startEdit(entry = null) {
+    if (entry) await resolveImageUrls(blockPaths(entry.blocks));
+    draft = {
+      id: entry?.id || null,
+      title: entry?.title || '',
+      location: entry?.location || '',
+      author: entry?.author || 'Both',
+      start_date: entry?.start_date || todayISO(),
+      end_date: entry?.end_date || '',
+      blocks: entry
+        ? entry.blocks.map(b => b.type === 'image'
+            ? { id: b.id, type: 'image', kind: b.kind, path: b.path, url: imageUrls[b.path], caption: b.caption || '' }
+            : { ...b })
+        : [newTextBlock()],
+      originalPaths: entry ? blockPaths(entry.blocks) : [],
+      saving: false,
+      error: ''
+    };
+    view = 'edit';
+    render();
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  function syncDraftFields() {
+    const val = id => container.querySelector(id)?.value;
+    draft.title = val('#diary-f-title') ?? draft.title;
+    draft.location = val('#diary-f-location') ?? draft.location;
+    draft.start_date = val('#diary-f-start') ?? draft.start_date;
+    draft.end_date = val('#diary-f-end') ?? draft.end_date;
+  }
+
+  function pickImages(kind, index) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.addEventListener('change', async () => {
+      const added = [];
+      for (const file of input.files) {
+        try {
+          const blob = await resizeImage(file, kind === 'map' ? 2200 : 1600);
+          added.push({ id: generateUUID(), type: 'image', kind, blob, url: URL.createObjectURL(blob), caption: '' });
+        } catch (e) {
+          draft.error = e.message;
+        }
+      }
+      if (added.length) {
+        draft.blocks.splice(index, 0, ...added);
+        draft.error = '';
+      }
+      render();
+    });
+    input.click();
+  }
+
+  async function saveDraft() {
+    syncDraftFields();
+    const d = draft;
+    if (!d.title.trim()) {
+      d.error = 'Give the story a title first.';
+      render();
+      return;
+    }
+    if (d.end_date && d.end_date < d.start_date) {
+      d.error = 'The end date is before the start date.';
+      render();
+      return;
+    }
+    d.saving = true;
+    d.error = '';
+    render();
+
+    try {
+      const blocks = [];
+      for (const b of d.blocks) {
+        if (b.type === 'text') {
+          if (b.text.trim()) blocks.push({ id: b.id, type: 'text', text: b.text.trim() });
+        } else {
+          const path = b.path || await uploadImage(b.blob);
+          blocks.push({ id: b.id, type: 'image', kind: b.kind, path, caption: b.caption.trim() });
+        }
+      }
+      const images = blocks.filter(b => b.type === 'image');
+      const fields = {
+        title: d.title.trim(),
+        location: d.location.trim() || null,
+        author: d.author,
+        start_date: d.start_date,
+        end_date: d.end_date || null,
+        blocks,
+        cover_path: (images.find(b => b.kind === 'photo') || images[0])?.path || null
+      };
+
+      let savedId = d.id;
+      if (useRemote) {
+        if (d.id) {
+          const { error } = await supabase.from('diary_entries').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', d.id);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase.from('diary_entries').insert({ ...fields, household_id: household.id }).select('id').single();
+          if (error) throw error;
+          savedId = data.id;
+        }
+      } else if (d.id) {
+        entries = entries.map(e => (e.id === d.id ? { ...e, ...fields } : e));
+      } else {
+        savedId = generateUUID();
+        entries.push({ id: savedId, ...fields, created_at: new Date().toISOString() });
+      }
+
+      // Only delete orphaned files once the entry itself is safely saved
+      const kept = new Set(blockPaths(blocks));
+      await removeImages(d.originalPaths.filter(p => !kept.has(p)));
+
+      draft = null;
+      if (useRemote) {
+        await loadData();
+      } else {
+        entries.sort((a, b) => (b.start_date + b.created_at).localeCompare(a.start_date + a.created_at));
+        persistLocal();
+      }
+      await openEntry(savedId);
+    } catch (e) {
+      console.error('Saving diary entry failed:', e);
+      d.saving = false;
+      d.error = e.message || 'Could not save. Please try again.';
+      render();
+    }
+  }
+
+  async function deleteActive() {
+    const e = entries.find(x => x.id === activeId);
+    if (!e || !confirm(`Delete "${e.title}" for good?`)) return;
+    if (useRemote) {
+      const { error } = await supabase.from('diary_entries').delete().eq('id', e.id);
+      if (error) {
+        alert('Could not delete the story.');
+        return;
+      }
+    }
+    await removeImages(blockPaths(e.blocks));
+    entries = entries.filter(x => x.id !== e.id);
+    if (!useRemote) persistLocal();
+    view = 'list';
+    activeId = null;
+    render();
+  }
+
+  function attachEvents() {
+    const $ = sel => container.querySelector(sel);
+    const on = (sel, fn) => $(sel)?.addEventListener('click', fn);
+
+    on('#diary-new', () => startEdit());
+    container.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openEntry(el.dataset.open)));
+
+    on('#diary-back', () => { view = 'list'; render(); });
+    on('#diary-edit', () => startEdit(entries.find(e => e.id === activeId)));
+    on('#diary-delete', deleteActive);
+
+    container.querySelectorAll('[data-zoom]').forEach(el => el.addEventListener('click', () => {
+      lightboxUrl = el.dataset.zoom;
+      render();
+    }));
+    on('#diary-lightbox', () => { lightboxUrl = null; render(); });
+
+    if (view !== 'edit') return;
+
+    on('#diary-cancel', () => {
+      if (!confirm('Discard your changes to this story?')) return;
+      draft = null;
+      view = activeId && entries.some(e => e.id === activeId) ? 'read' : 'list';
+      render();
+    });
+    on('#diary-save', saveDraft);
+
+    container.querySelectorAll('[data-author]').forEach(btn => btn.addEventListener('click', () => {
+      syncDraftFields();
+      draft.author = btn.dataset.author;
+      render();
+    }));
+
+    // Typing updates state directly, without re-rendering (keeps focus and caret)
+    container.querySelectorAll('[data-text]').forEach(el => el.addEventListener('input', () => {
+      draft.blocks[Number(el.dataset.text)].text = el.value;
+      autoGrow(el);
+    }));
+    container.querySelectorAll('[data-caption]').forEach(el => el.addEventListener('input', () => {
+      draft.blocks[Number(el.dataset.caption)].caption = el.value;
+    }));
+
+    container.querySelectorAll('[data-insert]').forEach(btn => btn.addEventListener('click', () => {
+      syncDraftFields();
+      const at = Number(btn.dataset.at);
+      if (btn.dataset.insert === 'text') {
+        draft.blocks.splice(at, 0, newTextBlock());
+        render();
+      } else {
+        pickImages(btn.dataset.insert, at);
+      }
+    }));
+    container.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => {
+      syncDraftFields();
+      const at = Number(btn.dataset.at);
+      const to = at + Number(btn.dataset.move);
+      [draft.blocks[at], draft.blocks[to]] = [draft.blocks[to], draft.blocks[at]];
+      render();
+    }));
+    container.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', () => {
+      syncDraftFields();
+      draft.blocks.splice(Number(btn.dataset.remove), 1);
+      render();
+    }));
+  }
+
+  await loadData();
+  render();
+}
