@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const MODEL = 'claude-sonnet-5-5';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const MAX_BASE64_CHARS = 7_000_000; // ~5MB of image data
 
 function sendResponse(res, status, json) {
@@ -32,8 +32,8 @@ async function getUserFromToken(token) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return sendResponse(res, 405, { error: 'POST only' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return sendResponse(res, 500, { error: 'ANTHROPIC_API_KEY is not configured on the server' });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return sendResponse(res, 500, { error: 'GEMINI_API_KEY is not configured on the server' });
 
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const user = await getUserFromToken(token);
@@ -55,37 +55,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 4000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-            {
-              type: 'text',
-              text: 'Transcribe the handwritten text in this image exactly as written, in its original language. ' +
-                'Keep paragraph breaks. Do not translate, correct, summarize or add commentary. ' +
-                'Mark any word you cannot read as [illegible]. Reply with the transcription only. ' +
-                'If there is no handwriting, reply with exactly: [no text found]'
-            }
-          ]
-        }]
-      })
-    });
+    const apiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          contents: [{
+            role: 'user',
+            parts: [
+              { inline_data: { mime_type: mediaType, data: image } },
+              {
+                text: 'Transcribe the handwritten text in this image exactly as written, in its original language. ' +
+                  'Keep paragraph breaks. Do not translate, correct, summarize or add commentary. ' +
+                  'Mark any word you cannot read as [illegible]. Reply with the transcription only. ' +
+                  'If there is no handwriting, reply with exactly: [no text found]'
+              }
+            ]
+          }],
+          generationConfig: { temperature: 0 }
+        })
+      }
+    );
 
     const data = await apiRes.json();
     if (!apiRes.ok) {
       return sendResponse(res, 502, { error: data?.error?.message || 'Transcription failed' });
     }
-    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
     return sendResponse(res, 200, { text: text === '[no text found]' ? '' : text });
   } catch (e) {
     return sendResponse(res, 502, { error: 'Could not reach the transcription service' });
