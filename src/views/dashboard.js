@@ -281,6 +281,22 @@ export async function mountDashboard(container, navigate) {
             <span class="card-arrow">→</span>
           </div>
         </div>
+
+        <!-- Journal -->
+        <div class="app-launch-card card-journal glass-panel" data-nav="/journal">
+          <div class="card-badge">Letters</div>
+          <div class="card-icon-wrap icon-journal">
+            <span>💌</span>
+          </div>
+          <div class="card-body">
+            <h2 class="card-title">Our Journal</h2>
+            <p class="card-desc">Longer, deeper messages to each other, with photos and scanned handwritten notes.</p>
+          </div>
+          <div class="card-footer">
+            <span class="card-action-label">Open Journal</span>
+            <span class="card-arrow">→</span>
+          </div>
+        </div>
       </section>
 
       <!-- Quick Summary Widgets -->

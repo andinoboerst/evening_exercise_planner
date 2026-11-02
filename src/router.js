@@ -7,12 +7,13 @@ import { mountRoutine, unmountRoutine } from './views/routine.js';
 import { mountMeals } from './views/meals.js';
 import { mountLists } from './views/lists.js';
 import { mountQuotes } from './views/quotes.js';
+import { mountJournal } from './views/journal.js';
 import { mountPlanner } from './views/planner.js';
 import { mountPrivacyPolicy } from './views/privacy-policy.js';
 import { mountTermsOfService } from './views/terms-of-service.js';
 
 export function applyRouteTheme(path) {
-  document.body.classList.remove('theme-hub', 'theme-routine', 'theme-meals', 'theme-lists', 'theme-quotes', 'theme-planner');
+  document.body.classList.remove('theme-hub', 'theme-routine', 'theme-meals', 'theme-lists', 'theme-quotes', 'theme-journal', 'theme-planner');
   
   if (path === '/routine') {
     document.body.classList.add('theme-routine');
@@ -22,6 +23,8 @@ export function applyRouteTheme(path) {
     document.body.classList.add('theme-lists');
   } else if (path === '/quotes') {
     document.body.classList.add('theme-quotes');
+  } else if (path === '/journal') {
+    document.body.classList.add('theme-journal');
   } else if (path === '/planner') {
     document.body.classList.add('theme-planner');
   } else {
@@ -163,6 +166,8 @@ class AppRouter {
       mountLists(viewContainer, (p) => this.navigate(p));
     } else if (path === '/quotes') {
       mountQuotes(viewContainer, (p) => this.navigate(p));
+    } else if (path === '/journal') {
+      mountJournal(viewContainer, (p) => this.navigate(p));
     } else if (path === '/planner') {
       mountPlanner(viewContainer, (p) => this.navigate(p));
     } else {

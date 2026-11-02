@@ -20,6 +20,10 @@ function devApiPlugin() {
             req.query = Object.fromEntries(url.searchParams.entries());
             return handler(req, res);
           }
+          if (url.pathname.startsWith('/api/journal/transcribe')) {
+            const { default: handler } = await import('./api/journal/transcribe.js');
+            return handler(req, res);
+          }
         } catch (e) {
           console.error('devApiPlugin error:', e);
         }
