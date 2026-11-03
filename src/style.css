@@ -5917,3 +5917,51 @@ body.theme-diary .dock-active-pill { background: #3F7D6E; }
 .diary-block-image img { width: 100%; max-height: 360px; object-fit: contain; border-radius: 8px; background: #F0F4F0; display: block; }
 .diary-block-image.is-map img { border: 1px solid #CFDACF; }
 .diary-error { color: #B42318; margin: 0; }
+
+/* ==============================================================================
+   OUR COLOR: shaded spruce (RGB 3, 87, 94)
+   Deliberately understated: small hints scattered through the app.
+   To remove them all, delete this block.
+   ============================================================================== */
+:root {
+  --spruce: #03575E;
+  --spruce-soft: rgba(3, 87, 94, 0.12);
+  --spruce-line: rgba(3, 87, 94, 0.35);
+}
+
+/* Text selection, caret, checkboxes/sliders and keyboard focus */
+::selection { background: rgba(3, 87, 94, 0.2); }
+input, textarea { caret-color: var(--spruce); }
+input[type='checkbox'], input[type='radio'], input[type='range'] { accent-color: var(--spruce); }
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--spruce-line);
+  outline-offset: 2px;
+}
+
+/* Scrollbars */
+html { scrollbar-color: var(--spruce-line) transparent; }
+body ::-webkit-scrollbar-thumb { background-color: var(--spruce-line); border-radius: 8px; }
+
+/* Home: a spruce hairline fading out along the bottom of the hero, and a tinted logo frame */
+body.theme-hub .dash-hero { position: relative; overflow: hidden; }
+body.theme-hub .dash-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 45%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--spruce), transparent);
+  pointer-events: none;
+}
+body.theme-hub .dash-logo-wrap,
+body.theme-hub .login-logo-wrap { border-color: var(--spruce-line); }
+
+/* Login card gets the same hairline along its top edge */
+body.theme-hub .login-card { border-top: 2px solid var(--spruce-line); }
+
+/* Dialogs everywhere get a faint spruce top edge */
+.modal-dialog { border-top: 2px solid var(--spruce-line); }
+
+/* The dock: a barely-there spruce glow underneath */
+.app-bottom-dock { filter: drop-shadow(0 6px 10px rgba(3, 87, 94, 0.10)); }
