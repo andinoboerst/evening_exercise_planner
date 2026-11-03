@@ -5983,3 +5983,13 @@ body.theme-hub .login-card { border-top: 2px solid var(--spruce-line); }
 .journal-entry-body h4, .diary-text h4 { font-family: Georgia, serif; font-size: 1.12rem; line-height: 2rem; margin: 0 0 0.25rem; }
 .diary-text h3 { line-height: 1.4; margin: 1.2em 0 0.4em; }
 .diary-text h4 { line-height: 1.4; margin: 1em 0 0.3em; }
+
+/* Diary cover picker */
+.diary-block-image { position: relative; }
+.diary-cover-badge {
+  position: absolute; top: 8px; left: 8px; padding: 3px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92); color: #2D5F52; font-size: 0.78rem; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.diary-block-controls .diary-cover-btn { filter: grayscale(1); opacity: 0.55; }
+.diary-block-controls .diary-cover-btn.is-cover { filter: none; opacity: 1; background: #FFF6D6; border-color: #E8C95A; }

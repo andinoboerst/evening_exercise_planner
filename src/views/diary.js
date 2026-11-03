@@ -49,6 +49,13 @@ function monthKeys(e) {
   return keys;
 }
 
+// The cover is the picture the author chose, otherwise the first photo (then the first image of any kind)
+function effectiveCoverId(d) {
+  const images = d.blocks.filter(b => b.type === 'image');
+  if (d.coverId && images.some(b => b.id === d.coverId)) return d.coverId;
+  return (images.find(b => b.kind === 'photo') || images[0])?.id || null;
+}
+
 const blockPaths = blocks => (blocks || []).filter(b => b.type === 'image' && b.path).map(b => b.path);
 
 export async function mountDiary(container, navigate) {
@@ -278,9 +285,11 @@ export async function mountDiary(container, navigate) {
       </div>`;
   }
 
-  function renderBlockEditor(b, i, total) {
+  function renderBlockEditor(b, i, total, coverId) {
+    const isCover = b.type === 'image' && b.id === coverId;
     const controls = `
       <div class="diary-block-controls">
+        ${b.type === 'image' ? `<button type="button" class="diary-cover-btn ${isCover ? 'is-cover' : ''}" data-cover="${i}" title="${isCover ? 'This is the cover' : 'Use as cover'}">⭐</button>` : ''}
         <button type="button" data-move="-1" data-at="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
         <button type="button" data-move="1" data-at="${i}" ${i === total - 1 ? 'disabled' : ''} title="Move down">↓</button>
         <button type="button" data-remove="${i}" title="Remove">🗑</button>
@@ -297,6 +306,7 @@ export async function mountDiary(container, navigate) {
       <div class="diary-block">
         ${controls}
         <div class="diary-block-image ${b.kind === 'map' ? 'is-map' : ''}">
+          ${isCover ? '<span class="diary-cover-badge">⭐ Cover</span>' : ''}
           <img src="${escapeHtml(b.url)}" alt="" />
         </div>
         <input type="text" class="text-input" data-caption="${i}" value="${escapeHtml(b.caption)}"
@@ -306,6 +316,7 @@ export async function mountDiary(container, navigate) {
 
   function renderEdit() {
     const d = draft;
+    const coverId = effectiveCoverId(d);
     return `
       <div class="diary-read-bar">
         <button class="diary-link-btn" id="diary-cancel">← Cancel</button>
@@ -340,7 +351,7 @@ export async function mountDiary(container, navigate) {
 
         <div class="diary-blocks">
           ${renderInserter(0)}
-          ${d.blocks.map((b, i) => renderBlockEditor(b, i, d.blocks.length) + renderInserter(i + 1)).join('')}
+          ${d.blocks.map((b, i) => renderBlockEditor(b, i, d.blocks.length, coverId) + renderInserter(i + 1)).join('')}
         </div>
 
         ${d.error ? `<p class="diary-error">${escapeHtml(d.error)}</p>` : ''}
@@ -389,6 +400,7 @@ export async function mountDiary(container, navigate) {
             ? { id: b.id, type: 'image', kind: b.kind, path: b.path, url: imageUrls[b.path], caption: b.caption || '' }
             : { ...b })
         : [newTextBlock()],
+      coverId: entry?.blocks.find(b => b.type === 'image' && b.path === entry.cover_path)?.id || null,
       originalPaths: entry ? blockPaths(entry.blocks) : [],
       saving: false,
       error: ''
@@ -457,7 +469,6 @@ export async function mountDiary(container, navigate) {
           blocks.push({ id: b.id, type: 'image', kind: b.kind, path, caption: b.caption.trim() });
         }
       }
-      const images = blocks.filter(b => b.type === 'image');
       const fields = {
         title: d.title.trim(),
         location: d.location.trim() || null,
@@ -465,7 +476,7 @@ export async function mountDiary(container, navigate) {
         start_date: d.start_date,
         end_date: d.end_date || null,
         blocks,
-        cover_path: (images.find(b => b.kind === 'photo') || images[0])?.path || null
+        cover_path: blocks.find(b => b.id === effectiveCoverId(d))?.path || null
       };
 
       let savedId = d.id;
@@ -598,6 +609,11 @@ export async function mountDiary(container, navigate) {
       } else {
         pickImages(btn.dataset.insert, at);
       }
+    }));
+    container.querySelectorAll('[data-cover]').forEach(btn => btn.addEventListener('click', () => {
+      syncDraftFields();
+      draft.coverId = draft.blocks[Number(btn.dataset.cover)].id;
+      render();
     }));
     container.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => {
       syncDraftFields();
