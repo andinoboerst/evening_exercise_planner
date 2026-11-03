@@ -5,6 +5,7 @@ import {
   generateUUID
 } from '../services/supabase.js';
 import { escapeHtml } from '../utils/escapeHtml.js';
+import { renderParagraphs } from '../utils/richText.js';
 import { resizeImage, blobToDataUrl } from '../utils/images.js';
 
 const BUCKET = 'journal-images';
@@ -34,12 +35,18 @@ function formatDateRange(start, end) {
   return `${fmt(start, full)} – ${fmt(end, full)}`;
 }
 
-function paragraphs(text) {
-  return String(text || '')
-    .split(/\n{2,}/)
-    .filter(p => p.trim())
-    .map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
-    .join('');
+// Every 'YYYY-MM' a story touches, so a trip crossing a month boundary shows up under both
+function monthKeys(e) {
+  const keys = [];
+  let [y, m] = e.start_date.slice(0, 7).split('-').map(Number);
+  const last = (e.end_date && e.end_date > e.start_date ? e.end_date : e.start_date).slice(0, 7);
+  for (let i = 0; i < 60; i++) {
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    keys.push(key);
+    if (key >= last) break;
+    if (++m > 12) { m = 1; y++; }
+  }
+  return keys;
 }
 
 const blockPaths = blocks => (blocks || []).filter(b => b.type === 'image' && b.path).map(b => b.path);
@@ -54,6 +61,10 @@ export async function mountDiary(container, navigate) {
   let activeId = null;
   let draft = null;
   let lightboxUrl = null;
+  let sortDir = 'desc'; // 'desc' = newest first
+  let filterYear = '';
+  let filterMonth = ''; // '01'..'12'
+  let query = '';
 
   // ---- Data ---------------------------------------------------------------
 
@@ -131,29 +142,89 @@ export async function mountDiary(container, navigate) {
         <button id="diary-new" class="diary-btn">＋ New story</button>
       </div>
 
-      ${entries.length ? `
-        <div class="diary-grid">
-          ${entries.map(e => {
-            const cover = e.cover_path && imageUrls[e.cover_path];
-            const author = AUTHORS.find(a => a.id === e.author)?.label || e.author;
-            return `
-              <button class="diary-card" data-open="${e.id}">
-                <div class="diary-card-cover ${cover ? '' : 'no-cover'}">
-                  ${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" />` : '<span>📖</span>'}
-                </div>
-                <div class="diary-card-body">
-                  <h3>${escapeHtml(e.title)}</h3>
-                  ${e.location ? `<div class="diary-card-place">📍 ${escapeHtml(e.location)}</div>` : ''}
-                  <div class="diary-card-meta">${escapeHtml(formatDateRange(e.start_date, e.end_date))} · ${escapeHtml(author)}</div>
-                </div>
-              </button>`;
-          }).join('')}
-        </div>` : `
+      ${entries.length ? renderToolbar() : ''}
+      <div id="diary-results">${renderResults()}</div>`;
+  }
+
+  function renderToolbar() {
+    const allKeys = entries.flatMap(monthKeys);
+    const years = [...new Set(allKeys.map(k => k.slice(0, 4)))].sort().reverse();
+    const months = [...new Set(allKeys.filter(k => !filterYear || k.startsWith(filterYear)).map(k => k.slice(5)))].sort();
+    const monthName = m => new Date(2000, Number(m) - 1, 1).toLocaleDateString(undefined, { month: 'long' });
+
+    return `
+      <div class="diary-toolbar">
+        <input type="search" id="diary-search" class="text-input diary-search" value="${escapeHtml(query)}"
+          placeholder="🔍 Search places, titles or text…" />
+        <select id="diary-year" class="text-input" aria-label="Filter by year">
+          <option value="">All years</option>
+          ${years.map(y => `<option value="${y}" ${y === filterYear ? 'selected' : ''}>${y}</option>`).join('')}
+        </select>
+        <select id="diary-month" class="text-input" aria-label="Filter by month">
+          <option value="">All months</option>
+          ${months.map(m => `<option value="${m}" ${m === filterMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}
+        </select>
+        <button type="button" id="diary-sort" class="diary-sort-btn" title="Change sort order">
+          ${sortDir === 'desc' ? '↓ Newest first' : '↑ Oldest first'}
+        </button>
+      </div>`;
+  }
+
+  function visibleEntries() {
+    const q = query.trim().toLowerCase();
+    const matches = e => {
+      if ((filterYear || filterMonth) &&
+          !monthKeys(e).some(k => (!filterYear || k.startsWith(filterYear)) && (!filterMonth || k.slice(5) === filterMonth))) {
+        return false;
+      }
+      if (!q) return true;
+      const text = (e.blocks || []).filter(b => b.type === 'text').map(b => b.text).join(' ');
+      return [e.title, e.location, text].some(v => (v || '').toLowerCase().includes(q));
+    };
+    const dir = sortDir === 'desc' ? -1 : 1;
+    return entries
+      .filter(matches)
+      .sort((a, b) => dir * (a.start_date + a.created_at).localeCompare(b.start_date + b.created_at));
+  }
+
+  function renderResults() {
+    if (entries.length === 0) {
+      return `
         <div class="diary-empty">
           <span>🗺️</span>
           <h3>No stories yet</h3>
           <p>Write about a trip or a favourite day, with photos and maps right where they belong.</p>
-        </div>`}`;
+        </div>`;
+    }
+    const list = visibleEntries();
+    if (list.length === 0) {
+      return `
+        <div class="diary-empty">
+          <span>🔍</span>
+          <h3>No stories match</h3>
+          <p>Try a different search, or clear the year and month filters.</p>
+        </div>`;
+    }
+    const filtered = list.length !== entries.length;
+    return `
+      ${filtered ? `<div class="diary-count">${list.length} of ${entries.length} stories</div>` : ''}
+      <div class="diary-grid">
+        ${list.map(e => {
+          const cover = e.cover_path && imageUrls[e.cover_path];
+          const author = AUTHORS.find(a => a.id === e.author)?.label || e.author;
+          return `
+            <button class="diary-card" data-open="${e.id}">
+              <div class="diary-card-cover ${cover ? '' : 'no-cover'}">
+                ${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" />` : '<span>📖</span>'}
+              </div>
+              <div class="diary-card-body">
+                <h3>${escapeHtml(e.title)}</h3>
+                ${e.location ? `<div class="diary-card-place">📍 ${escapeHtml(e.location)}</div>` : ''}
+                <div class="diary-card-meta">${escapeHtml(formatDateRange(e.start_date, e.end_date))} · ${escapeHtml(author)}</div>
+              </div>
+            </button>`;
+        }).join('')}
+      </div>`;
   }
 
   // ---- Rendering: reading -------------------------------------------------
@@ -164,7 +235,7 @@ export async function mountDiary(container, navigate) {
     const author = AUTHORS.find(a => a.id === e.author)?.label || e.author;
 
     const body = (e.blocks || []).map(b => {
-      if (b.type === 'text') return `<div class="diary-text">${paragraphs(b.text)}</div>`;
+      if (b.type === 'text') return `<div class="diary-text">${renderParagraphs(b.text)}</div>`;
       const url = imageUrls[b.path];
       if (!url) return '';
       return `
@@ -219,7 +290,7 @@ export async function mountDiary(container, navigate) {
       return `
         <div class="diary-block">
           ${controls}
-          <textarea class="text-input diary-block-text" data-text="${i}" rows="4" placeholder="Tell the story…">${escapeHtml(b.text)}</textarea>
+          <textarea class="text-input diary-block-text" data-text="${i}" rows="4" placeholder="Tell the story… (*bold*, _italic_, # heading)">${escapeHtml(b.text)}</textarea>
         </div>`;
     }
     return `
@@ -452,12 +523,36 @@ export async function mountDiary(container, navigate) {
     render();
   }
 
+  function bindCards() {
+    container.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openEntry(el.dataset.open)));
+  }
+
   function attachEvents() {
     const $ = sel => container.querySelector(sel);
     const on = (sel, fn) => $(sel)?.addEventListener('click', fn);
 
     on('#diary-new', () => startEdit());
-    container.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openEntry(el.dataset.open)));
+    bindCards();
+
+    // Search only redraws the results, so the input keeps focus while typing
+    $('#diary-search')?.addEventListener('input', e => {
+      query = e.target.value;
+      $('#diary-results').innerHTML = renderResults();
+      bindCards();
+    });
+    $('#diary-year')?.addEventListener('change', e => {
+      filterYear = e.target.value;
+      filterMonth = '';
+      render();
+    });
+    $('#diary-month')?.addEventListener('change', e => {
+      filterMonth = e.target.value;
+      render();
+    });
+    on('#diary-sort', () => {
+      sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+      render();
+    });
 
     on('#diary-back', () => { view = 'list'; render(); });
     on('#diary-edit', () => startEdit(entries.find(e => e.id === activeId)));

@@ -5965,3 +5965,21 @@ body.theme-hub .login-card { border-top: 2px solid var(--spruce-line); }
 
 /* The dock: a barely-there spruce glow underneath */
 .app-bottom-dock { filter: drop-shadow(0 6px 10px rgba(3, 87, 94, 0.10)); }
+
+/* Diary list toolbar: search, year/month filters, sort */
+.diary-toolbar { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; }
+@media (max-width: 620px) {
+  .diary-toolbar { grid-template-columns: 1fr 1fr; }
+  .diary-search { grid-column: 1 / -1; }
+}
+.diary-sort-btn {
+  padding: 10px 14px; border-radius: 10px; border: 1px solid #DCE5DB; background: #fff;
+  font-weight: 600; font-size: 0.88rem; color: #2D5F52; cursor: pointer; white-space: nowrap;
+}
+.diary-count { font-size: 0.85rem; color: #66756D; margin-bottom: 10px; }
+
+/* Headings written with # in letters and diary stories */
+.journal-entry-body h3, .diary-text h3 { font-family: Georgia, serif; font-size: 1.35rem; line-height: 2rem; margin: 0 0 0.5rem; }
+.journal-entry-body h4, .diary-text h4 { font-family: Georgia, serif; font-size: 1.12rem; line-height: 2rem; margin: 0 0 0.25rem; }
+.diary-text h3 { line-height: 1.4; margin: 1.2em 0 0.4em; }
+.diary-text h4 { line-height: 1.4; margin: 1em 0 0.3em; }

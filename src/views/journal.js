@@ -6,6 +6,7 @@ import {
   generateUUID
 } from '../services/supabase.js';
 import { escapeHtml } from '../utils/escapeHtml.js';
+import { renderParagraphs } from '../utils/richText.js';
 import { resizeImage, blobToDataUrl } from '../utils/images.js';
 
 const BUCKET = 'journal-images';
@@ -130,10 +131,7 @@ export async function mountJournal(container, navigate) {
   // ---- Rendering ----------------------------------------------------------
 
   function renderEntry(e) {
-    const paragraphs = String(e.body || '')
-      .split(/\n{2,}/)
-      .map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
-      .join('');
+    const paragraphs = renderParagraphs(e.body);
     const images = (e.image_paths || []).filter(p => imageUrls[p]);
     const isNuria = e.author === 'Núria';
 
@@ -194,6 +192,7 @@ export async function mountJournal(container, navigate) {
             <div class="form-group" style="margin-top: 14px;">
               <label for="journal-body">Your words</label>
               <textarea id="journal-body" class="text-input journal-textarea" rows="10" placeholder="Dear ...">${escapeHtml(m.body)}</textarea>
+              <p class="journal-hint">Formatting: *bold*, _italic_, and start a line with # for a heading.</p>
             </div>
 
             <div class="journal-attach-row">
