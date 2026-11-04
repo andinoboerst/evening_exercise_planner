@@ -29,6 +29,11 @@ export async function mountPlanner(container, navigate) {
 
   // State
   let currentMonday = getMondayOfWeek(new Date());
+  let viewMode = 'week'; // 'week' | 'month'
+  try {
+    if (localStorage.getItem('andinu_planner_view') === 'month') viewMode = 'month';
+  } catch (_) { }
+  let currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   let settings = null;
   let sleepDefaults = [];
   let dayPlans = [];
@@ -520,11 +525,17 @@ export async function mountPlanner(container, navigate) {
 
   // Main Render Routine
   function render() {
+    const isMonthView = viewMode === 'month';
     const weekDays = getDaysForWeek(currentMonday);
-    const weekLabel = formatWeekRangeLabel(currentMonday);
-    const thisMonday = getMondayOfWeek(new Date());
-    const isThisWeek = formatDateISO(currentMonday) === formatDateISO(thisMonday);
-    const todayStr = formatDateISO(new Date());
+    const todayNow = new Date();
+    const weekLabel = isMonthView
+      ? currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : formatWeekRangeLabel(currentMonday);
+    const thisMonday = getMondayOfWeek(todayNow);
+    const isThisWeek = isMonthView
+      ? (currentMonth.getFullYear() === todayNow.getFullYear() && currentMonth.getMonth() === todayNow.getMonth())
+      : formatDateISO(currentMonday) === formatDateISO(thisMonday);
+    const todayStr = formatDateISO(todayNow);
 
     // Resolve plans and events for all 7 days
     const dayDataList = weekDays.map(day => {
@@ -555,7 +566,7 @@ export async function mountPlanner(container, navigate) {
 
             <!-- Week Controls -->
             <div class="planner-week-controls">
-              <button id="btn-prev-week" class="planner-nav-btn" aria-label="Previous Week" title="Previous Week">
+              <button id="btn-prev-week" class="planner-nav-btn" aria-label="Previous ${isMonthView ? 'Month' : 'Week'}" title="Previous ${isMonthView ? 'Month' : 'Week'}">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
@@ -565,15 +576,21 @@ export async function mountPlanner(container, navigate) {
                 ${weekLabel}
               </div>
 
-              <button id="btn-next-week" class="planner-nav-btn" aria-label="Next Week" title="Next Week">
+              <button id="btn-next-week" class="planner-nav-btn" aria-label="Next ${isMonthView ? 'Month' : 'Week'}" title="Next ${isMonthView ? 'Month' : 'Week'}">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </button>
 
               <button id="btn-this-week" class="planner-today-btn ${isThisWeek ? 'is-current' : ''}">
-                This Week
+                ${isMonthView ? 'This Month' : 'This Week'}
               </button>
+            </div>
+
+            <!-- View Toggle -->
+            <div class="planner-view-toggle" role="group" aria-label="Calendar view">
+              <button type="button" class="planner-view-btn ${isMonthView ? '' : 'active'}" data-set-view="week">Week</button>
+              <button type="button" class="planner-view-btn ${isMonthView ? 'active' : ''}" data-set-view="month">Month</button>
             </div>
 
             <!-- Top Action Pills -->
@@ -599,7 +616,7 @@ export async function mountPlanner(container, navigate) {
         </header>
 
         <!-- Mobile Sticky Mon-Sun Day Pill Strip (< 768px) -->
-        <nav class="planner-mobile-strip-wrap" aria-label="Day selection strip">
+        <nav class="planner-mobile-strip-wrap" aria-label="Day selection strip" ${isMonthView ? 'style="display:none"' : ''}>
           <div class="planner-mobile-strip">
             ${dayDataList.map(day => {
       const dots = {
@@ -631,9 +648,10 @@ export async function mountPlanner(container, navigate) {
 
         <!-- Main Weekly Board (Desktop 7-Col Grid / Mobile Vertical Stack) -->
         <main class="planner-board-container">
+          ${isMonthView ? renderMonthGrid(todayStr) : `
           <div class="planner-days-grid">
             ${dayDataList.map(day => renderDayColumn(day, todayStr)).join('')}
-          </div>
+          </div>`}
         </main>
 
         <!-- Dialogs & Modals -->
@@ -648,6 +666,62 @@ export async function mountPlanner(container, navigate) {
     `;
 
     bindEvents();
+  }
+
+  // Render the Month Grid (6 weeks max, Monday-first)
+  function renderMonthGrid(todayStr) {
+    const firstOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const gridStart = getMondayOfWeek(firstOfMonth);
+    const lastOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const weekCount = Math.ceil(((lastOfMonth - gridStart) / 86400000 + 1) / 7);
+    const MAX_CHIPS = 3;
+
+    const cells = [];
+    for (let i = 0; i < weekCount * 7; i++) {
+      const d = new Date(gridStart);
+      d.setDate(d.getDate() + i);
+      const iso = formatDateISO(d);
+      const inMonth = d.getMonth() === currentMonth.getMonth();
+      const dayEvents = projectEventsForDate(events, iso);
+      const sleep = resolveDaySleepPlan(iso, dayPlans, sleepDefaults);
+
+      const chips = dayEvents.slice(0, MAX_CHIPS).map(ev => {
+        const owner = OWNER_TYPES[ev.owner_type] || OWNER_TYPES.together;
+        const timed = !ev.is_all_day && ev.start_time && ev.spanPosition !== 'end';
+        const cont = ev.spanPosition === 'middle' || ev.spanPosition === 'end' ? '← ' : '';
+        const more = ev.spanPosition === 'start' || ev.spanPosition === 'middle' ? ' →' : '';
+        return `
+          <button type="button" class="month-chip" data-month-day="${iso}"
+            style="background:${owner.bg};color:${owner.color};border-color:${owner.border}"
+            title="${escapeHtml(ev.title)}">
+            ${timed ? `<span class="mc-time">${ev.start_time.slice(0, 5)}</span>` : ''}
+            <span class="mc-title">${cont}${escapeHtml(ev.title)}${more}</span>
+          </button>`;
+      }).join('');
+      const overflow = dayEvents.length - MAX_CHIPS;
+
+      cells.push(`
+        <div class="month-cell ${inMonth ? '' : 'is-outside'} ${iso === todayStr ? 'is-today' : ''}" data-month-day="${iso}" role="button" tabindex="0">
+          <div class="month-cell-head">
+            <span class="month-cell-num">${d.getDate()}</span>
+            <span class="month-cell-sleep" title="Sleep: ${sleep.locationMeta.label}">${sleep.locationMeta.icon}</span>
+          </div>
+          <div class="month-cell-events">
+            ${chips}
+            ${overflow > 0 ? `<span class="month-more">+${overflow} more</span>` : ''}
+          </div>
+        </div>`);
+    }
+
+    return `
+      <div class="planner-month">
+        <div class="month-weekdays">
+          ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(n => `<div>${n}</div>`).join('')}
+        </div>
+        <div class="month-grid" style="grid-template-rows: repeat(${weekCount}, minmax(96px, 1fr))">
+          ${cells.join('')}
+        </div>
+      </div>`;
   }
 
   // Render a Single Day Column / Card
@@ -1426,24 +1500,55 @@ export async function mountPlanner(container, navigate) {
 
   // Event Listeners & Interactions
   function bindEvents() {
-    // 1. Week Navigation
-    document.getElementById('btn-prev-week')?.addEventListener('click', () => {
-      const prev = new Date(currentMonday);
-      prev.setDate(prev.getDate() - 7);
-      currentMonday = prev;
+    // 1. Week / Month Navigation
+    const shift = (dir) => {
+      if (viewMode === 'month') {
+        currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + dir, 1);
+      } else {
+        const d = new Date(currentMonday);
+        d.setDate(d.getDate() + dir * 7);
+        currentMonday = d;
+      }
       render();
-    });
-
-    document.getElementById('btn-next-week')?.addEventListener('click', () => {
-      const next = new Date(currentMonday);
-      next.setDate(next.getDate() + 7);
-      currentMonday = next;
-      render();
-    });
+    };
+    document.getElementById('btn-prev-week')?.addEventListener('click', () => shift(-1));
+    document.getElementById('btn-next-week')?.addEventListener('click', () => shift(1));
 
     document.getElementById('btn-this-week')?.addEventListener('click', () => {
       currentMonday = getMondayOfWeek(new Date());
+      currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
       render();
+    });
+
+    document.querySelectorAll('[data-set-view]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.getAttribute('data-set-view');
+        if (mode === viewMode) return;
+        viewMode = mode;
+        try { localStorage.setItem('andinu_planner_view', mode); } catch (_) { }
+        if (mode === 'month') {
+          // Open the month containing the week being viewed (use Thursday, like ISO weeks)
+          const thu = new Date(currentMonday);
+          thu.setDate(thu.getDate() + 3);
+          currentMonth = new Date(thu.getFullYear(), thu.getMonth(), 1);
+        }
+        render();
+      });
+    });
+
+    // Month cell click -> open that day's week
+    document.querySelectorAll('[data-month-day]').forEach(el => {
+      const open = (e) => {
+        e.stopPropagation();
+        const iso = el.getAttribute('data-month-day');
+        currentMonday = getMondayOfWeek(parseDateISO(iso));
+        viewMode = 'week';
+        try { localStorage.setItem('andinu_planner_view', 'week'); } catch (_) { }
+        render();
+        document.getElementById(`day-card-${iso}`)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'center' });
+      };
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
     });
 
     // 2. Mobile Day Pill Strip Click -> Scroll smoothly to day card
