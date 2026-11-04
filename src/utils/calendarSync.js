@@ -206,92 +206,89 @@ export function resolveDaySleepPlan(isoDate, dayPlans = [], sleepDefaults = []) 
 }
 
 /**
- * Project one-time and weekly recurring events for a specific date
+ * Whether a recurring event has an occurrence starting on isoDate
+ */
+function recurringStartsOn(ev, isoDate) {
+  if (ev.event_date > isoDate) return false;
+  if (ev.recurrence_end_date && ev.recurrence_end_date < isoDate) return false;
+  if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.includes(isoDate)) return false;
+
+  const [, em, ed] = ev.event_date.split('-').map(Number);
+  const [cy, cm, cd] = isoDate.split('-').map(Number);
+
+  if (ev.recurrence_type === 'weekly') {
+    const jsDay = parseDateISO(isoDate).getDay();
+    const isoWeekday = jsDay === 0 ? 7 : jsDay;
+    const days = Array.isArray(ev.recurrence_days) && ev.recurrence_days.length > 0
+      ? ev.recurrence_days.map(Number)
+      : [(() => {
+          const startD = parseDateISO(ev.event_date).getDay();
+          return startD === 0 ? 7 : startD;
+        })()];
+    return days.includes(isoWeekday);
+  }
+
+  if (ev.recurrence_type === 'monthly') {
+    // Same day of the month (clamped for short months)
+    return cd === Math.min(ed, new Date(cy, cm, 0).getDate());
+  }
+
+  if (ev.recurrence_type === 'annually') {
+    if (em === cm && ed === cd) return true;
+    // Feb 29 anniversary on non-leap years
+    if (em === 2 && ed === 29 && cm === 2 && cd === 28) {
+      return new Date(cy, 1, 29).getMonth() !== 1;
+    }
+  }
+  return false;
+}
+
+/**
+ * Project one-time and recurring events (including multi-day spans) for a specific date
  */
 export function projectEventsForDate(events = [], isoDate) {
-  const dateObj = parseDateISO(isoDate);
-  const jsDay = dateObj.getDay();
-  const isoWeekday = jsDay === 0 ? 7 : jsDay;
-
   const matched = [];
 
   for (const ev of events) {
-    if (ev.recurrence_type === 'none' || !ev.recurrence_type) {
-      if (ev.event_date === isoDate) {
-        matched.push({
-          ...ev,
-          instanceDate: isoDate,
-          isProjected: false
-        });
-      }
-    } else if (ev.recurrence_type === 'weekly') {
-      // Must have started on or before this day
-      if (ev.event_date > isoDate) continue;
+    const spanDays = ev.end_date && ev.end_date > ev.event_date
+      ? Math.round((parseDateISO(ev.end_date) - parseDateISO(ev.event_date)) / 86400000)
+      : 0;
+    const isRecurring = ev.recurrence_type && ev.recurrence_type !== 'none';
 
-      // Must not be after recurrence_end_date if set
-      if (ev.recurrence_end_date && ev.recurrence_end_date < isoDate) continue;
-
-      // Must not be in excluded_dates
-      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.includes(isoDate)) continue;
-
-      // Check weekdays
-      const days = Array.isArray(ev.recurrence_days) && ev.recurrence_days.length > 0
-        ? ev.recurrence_days.map(Number)
-        : [(() => {
-            const startD = parseDateISO(ev.event_date).getDay();
-            return startD === 0 ? 7 : startD;
-          })()];
-
-      if (days.includes(isoWeekday)) {
-        matched.push({
-          ...ev,
-          instanceDate: isoDate,
-          isProjected: true
-        });
-      }
-    } else if (ev.recurrence_type === 'monthly') {
-      // Monthly recurrence: same day of the month
-      if (ev.event_date > isoDate) continue;
-      if (ev.recurrence_end_date && ev.recurrence_end_date < isoDate) continue;
-      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.includes(isoDate)) continue;
-
-      const [ey, em, ed] = ev.event_date.split('-').map(Number);
-      const [cy, cm, cd] = isoDate.split('-').map(Number);
-
-      const daysInCurrentMonth = new Date(cy, cm, 0).getDate();
-      const targetDay = Math.min(ed, daysInCurrentMonth);
-
-      if (cd === targetDay) {
-        matched.push({
-          ...ev,
-          instanceDate: isoDate,
-          isProjected: true
-        });
-      }
-    } else if (ev.recurrence_type === 'annually') {
-      // Annually recurrence: anniversaries, birthdays (same month & day)
-      if (ev.event_date > isoDate) continue;
-      if (ev.recurrence_end_date && ev.recurrence_end_date < isoDate) continue;
-      if (Array.isArray(ev.excluded_dates) && ev.excluded_dates.includes(isoDate)) continue;
-
-      const [ey, em, ed] = ev.event_date.split('-').map(Number);
-      const [cy, cm, cd] = isoDate.split('-').map(Number);
-
-      let isMatch = (em === cm && ed === cd);
-      // Handle leap year Feb 29 anniversary on non-leap years
-      if (!isMatch && em === 2 && ed === 29 && cm === 2 && cd === 28) {
-        const isLeap = new Date(cy, 1, 29).getMonth() === 1;
-        if (!isLeap) isMatch = true;
-      }
-
-      if (isMatch) {
-        matched.push({
-          ...ev,
-          instanceDate: isoDate,
-          isProjected: true
-        });
-      }
+    // Find the occurrence start (within the span) that covers isoDate
+    let offset = -1;
+    for (let k = 0; k <= spanDays; k++) {
+      const d = parseDateISO(isoDate);
+      d.setDate(d.getDate() - k);
+      const startIso = formatDateISO(d);
+      const starts = isRecurring ? recurringStartsOn(ev, startIso) : startIso === ev.event_date;
+      if (starts) { offset = k; break; }
     }
+    if (offset < 0) continue;
+
+    const startD = parseDateISO(isoDate);
+    startD.setDate(startD.getDate() - offset);
+
+    const spanPosition = spanDays === 0 ? null
+      : offset === 0 ? 'start'
+      : offset === spanDays ? 'end'
+      : 'middle';
+
+    matched.push({
+      ...ev,
+      instanceDate: isoDate,
+      occurrenceStart: formatDateISO(startD),
+      isProjected: Boolean(isRecurring),
+      spanPosition,
+      // Occurrence end date (differs from end_date for repeats)
+      occurrenceEnd: spanDays ? (() => {
+        const e = new Date(startD);
+        e.setDate(e.getDate() + spanDays);
+        return formatDateISO(e);
+      })() : null,
+      // Middle days have no specific time, so show them in the all-day strip
+      is_all_day: ev.is_all_day || spanPosition === 'middle'
+    });
   }
 
   // Sort: All-day first, then by start_time
@@ -318,19 +315,30 @@ export function createGoogleCalendarLink(event, instanceDate) {
   if (event.notes) details += `${event.notes}\n\n`;
   details += `Owner: ${owner.label}\nManaged via AndiNú couples planner: https://andinu.cc/planner`;
 
+  // Multi-day events link to the whole span, not just the clicked day
+  const isMultiDay = event.end_date && event.end_date > event.event_date;
+  const spanStart = dateStr;
+  let spanEnd = dateStr;
+  if (isMultiDay) {
+    const spanDays = Math.round((parseDateISO(event.end_date) - parseDateISO(event.event_date)) / 86400000);
+    const e = parseDateISO(dateStr);
+    e.setDate(e.getDate() + spanDays);
+    spanEnd = formatDateISO(e);
+  }
+
   let datesParam = '';
   if (event.is_all_day) {
-    const startStr = dateStr.replace(/-/g, '');
-    const d = parseDateISO(dateStr);
+    const startStr = spanStart.replace(/-/g, '');
+    const d = parseDateISO(spanEnd);
     d.setDate(d.getDate() + 1);
     const endStr = formatDateISO(d).replace(/-/g, '');
     datesParam = `${startStr}/${endStr}`;
   } else {
     const startTime = (event.start_time || '09:00').slice(0, 5).replace(':', '') + '00';
     let endTime = (event.end_time || '10:00').slice(0, 5).replace(':', '') + '00';
-    const startIso = `${dateStr.replace(/-/g, '')}T${startTime}`;
-    let endIso = `${dateStr.replace(/-/g, '')}T${endTime}`;
-    if (endTime <= startTime) {
+    const startIso = `${spanStart.replace(/-/g, '')}T${startTime}`;
+    let endIso = `${spanEnd.replace(/-/g, '')}T${endTime}`;
+    if (!isMultiDay && endTime <= startTime) {
       const d = parseDateISO(dateStr);
       d.setDate(d.getDate() + 1);
       endIso = `${formatDateISO(d).replace(/-/g, '')}T${endTime}`;
@@ -459,7 +467,7 @@ export function generateIcsContent({
 
     if (ev.is_all_day) {
       const startDay = toICalDateOnly(ev.event_date);
-      const d = parseDateISO(ev.event_date);
+      const d = parseDateISO(ev.end_date && ev.end_date > ev.event_date ? ev.end_date : ev.event_date);
       d.setDate(d.getDate() + 1);
       const nextDay = toICalDateOnly(formatDateISO(d));
       lines.push(`DTSTART;VALUE=DATE:${startDay}`);
@@ -469,7 +477,8 @@ export function generateIcsContent({
       const startTime = ev.start_time || '09:00:00';
       const endTime = ev.end_time || '10:00:00';
       lines.push(`DTSTART:${toICalDateTime(d, startTime)}`);
-      lines.push(`DTEND:${toICalDateTime(d, endTime)}`);
+      const endD = ev.end_date && ev.end_date > ev.event_date ? parseDateISO(ev.end_date) : d;
+      lines.push(`DTEND:${toICalDateTime(endD, endTime)}`);
     }
 
     // Recurrence rules

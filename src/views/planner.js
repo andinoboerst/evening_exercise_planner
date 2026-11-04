@@ -758,13 +758,13 @@ export async function mountPlanner(container, navigate) {
         <!-- All-Day Events Strip (Compact bar below sleep card, at top of day's events) -->
         ${allDayEvents.length > 0 ? `
           <div class="day-allday-events-strip" aria-label="All-day events for ${day.shortName}">
-            ${allDayEvents.map(ev => renderAllDayEventBar(ev, day.isoDate)).join('')}
+            ${allDayEvents.map(ev => renderAllDayEventBar(ev, ev.occurrenceStart || day.isoDate)).join('')}
           </div>
         ` : ''}
 
         <!-- Chronological Events List -->
         <div class="day-events-list">
-          ${timedEvents.length > 0 ? timedEvents.map(ev => renderEventCard(ev, day.isoDate)).join('') : (allDayEvents.length > 0 ? '' : `
+          ${timedEvents.length > 0 ? timedEvents.map(ev => renderEventCard(ev, ev.occurrenceStart || day.isoDate)).join('') : (allDayEvents.length > 0 ? '' : `
             <div class="day-events-empty">
               <span>No events scheduled</span>
               <button class="empty-add-btn" data-add-for-date="${day.isoDate}">+ Add</button>
@@ -773,6 +773,10 @@ export async function mountPlanner(container, navigate) {
         </div>
       </section>
     `;
+  }
+
+  function formatShortDate(iso) {
+    return parseDateISO(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   // Render an All-Day Event Bar (Google Calendar Top Bar style)
@@ -794,7 +798,10 @@ export async function mountPlanner(container, navigate) {
       recurTitle = 'Repeats weekly';
     }
 
-    let tooltip = `${ev.title} (All Day • ${owner.tag})`;
+    const spanNote = ev.end_date && ev.end_date > ev.event_date
+      ? ` • ${formatShortDate(ev.occurrenceStart || ev.event_date)} → ${formatShortDate(ev.occurrenceEnd || ev.end_date)}`
+      : '';
+    let tooltip = `${ev.title} (All Day${spanNote} • ${owner.tag})`;
     if (recurTitle) tooltip += ` — ${recurTitle}`;
     if (ev.location) tooltip += ` • 📍 ${ev.location}`;
     if (ev.notes) tooltip += ` • 💬 ${ev.notes}`;
@@ -812,6 +819,7 @@ export async function mountPlanner(container, navigate) {
         <div class="allday-bar-content">
           ${recurIcon ? `<span class="allday-recur-badge" title="${recurTitle}">${recurIcon}</span>` : ''}
           <span class="allday-owner-tag">${owner.tag}</span>
+          ${ev.spanPosition ? '<span class="allday-recur-badge" title="Multi-day event">↔</span>' : ''}
           <span class="allday-bar-title">${escapeHtml(ev.title)}</span>
           ${ev.location ? `<span class="allday-location-pin" title="${escapeHtml(ev.location)}">📍</span>` : ''}
         </div>
@@ -844,7 +852,12 @@ export async function mountPlanner(container, navigate) {
     }
 
     let timeLabel = 'All Day';
-    if (!ev.is_all_day && ev.start_time) {
+    if (ev.spanPosition === 'start') {
+      timeLabel = ev.is_all_day || !ev.start_time ? 'All Day' : `From ${ev.start_time.slice(0, 5)}`;
+      timeLabel += ` → ${formatShortDate(ev.occurrenceEnd || ev.end_date)}`;
+    } else if (ev.spanPosition === 'end') {
+      timeLabel = ev.is_all_day || !ev.end_time ? 'Ends today' : `Until ${ev.end_time.slice(0, 5)}`;
+    } else if (!ev.is_all_day && ev.start_time) {
       timeLabel = ev.start_time.slice(0, 5);
       if (ev.end_time) timeLabel += ` – ${ev.end_time.slice(0, 5)}`;
     }
@@ -943,6 +956,11 @@ export async function mountPlanner(container, navigate) {
               <div class="form-group flex-1">
                 <label for="event-input-date" class="form-label">Date *</label>
                 <input type="date" id="event-input-date" class="form-input" required />
+              </div>
+
+              <div class="form-group flex-1">
+                <label for="event-input-end-date" class="form-label">End Date (Optional)</label>
+                <input type="date" id="event-input-end-date" class="form-input" />
               </div>
 
               <div class="form-group check-group-inline">
@@ -1710,6 +1728,9 @@ export async function mountPlanner(container, navigate) {
     const inputDate = document.getElementById('event-input-date');
     if (inputDate) inputDate.value = isoDate;
 
+    const inputEndDate = document.getElementById('event-input-end-date');
+    if (inputEndDate) inputEndDate.value = '';
+
     const inputAllDay = document.getElementById('event-input-allday');
     if (inputAllDay) inputAllDay.checked = false;
 
@@ -1754,6 +1775,9 @@ export async function mountPlanner(container, navigate) {
 
     const inputDate = document.getElementById('event-input-date');
     if (inputDate) inputDate.value = ev.event_date;
+
+    const inputEndDate = document.getElementById('event-input-end-date');
+    if (inputEndDate) inputEndDate.value = ev.end_date || '';
 
     const inputAllDay = document.getElementById('event-input-allday');
     if (inputAllDay) inputAllDay.checked = Boolean(ev.is_all_day);
@@ -1824,9 +1848,15 @@ export async function mountPlanner(container, navigate) {
       }
     });
 
+    const endDateInput = document.getElementById('event-input-end-date');
     dateInput?.addEventListener('change', () => {
       updateRecurrenceUI();
+      if (endDateInput) {
+        endDateInput.min = dateInput.value;
+        if (endDateInput.value && endDateInput.value < dateInput.value) endDateInput.value = dateInput.value;
+      }
     });
+
 
     // Weekday toggle buttons
     document.querySelectorAll('.btn-weekday-toggle').forEach(btn => {
@@ -1842,11 +1872,13 @@ export async function mountPlanner(container, navigate) {
       const title = document.getElementById('event-input-title')?.value.trim();
       const ownerType = document.querySelector('input[name="event-owner"]:checked')?.value || 'together';
       const eventDate = document.getElementById('event-input-date')?.value;
+      const endDateVal = document.getElementById('event-input-end-date')?.value;
       const isAllDay = document.getElementById('event-input-allday')?.checked || false;
       const startTime = isAllDay ? null : (document.getElementById('event-input-start')?.value || '18:30');
       const endTime = isAllDay ? null : (document.getElementById('event-input-end')?.value || '20:00');
       const location = document.getElementById('event-input-location')?.value.trim();
       const notes = document.getElementById('event-input-notes')?.value.trim();
+      const isMultiDay = Boolean(endDateVal && endDateVal > eventDate);
       const recurrenceType = document.getElementById('event-input-recurrence')?.value || 'none';
 
       let recurrenceDays = [];
@@ -1866,6 +1898,7 @@ export async function mountPlanner(container, navigate) {
         title,
         owner_type: ownerType,
         event_date: eventDate,
+        end_date: isMultiDay ? endDateVal : null,
         is_all_day: isAllDay,
         start_time: startTime,
         end_time: endTime,

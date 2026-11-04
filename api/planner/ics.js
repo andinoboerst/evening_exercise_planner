@@ -105,7 +105,7 @@ export function buildIcsString(data) {
     lines.push(`DESCRIPTION:${escapeICalText(description)}`);
 
     if (ev.is_all_day) {
-      const [y, m, d] = ev.event_date.split('-').map(Number);
+      const [y, m, d] = (ev.end_date && ev.end_date > ev.event_date ? ev.end_date : ev.event_date).split('-').map(Number);
       const nextD = new Date(y, m - 1, d + 1);
       const nextStr = `${nextD.getFullYear()}${String(nextD.getMonth() + 1).padStart(2, '0')}${String(nextD.getDate()).padStart(2, '0')}`;
       lines.push(`DTSTART;VALUE=DATE:${toICalDateOnly(ev.event_date)}`);
@@ -114,7 +114,12 @@ export function buildIcsString(data) {
       const [y, m, d] = ev.event_date.split('-').map(Number);
       const dateObj = new Date(y, m - 1, d);
       lines.push(`DTSTART:${toICalLocalDateTime(dateObj, ev.start_time || '09:00:00')}`);
-      lines.push(`DTEND:${toICalLocalDateTime(dateObj, ev.end_time || '10:00:00')}`);
+      let endObj = dateObj;
+      if (ev.end_date && ev.end_date > ev.event_date) {
+        const [ey, em, ed] = ev.end_date.split('-').map(Number);
+        endObj = new Date(ey, em - 1, ed);
+      }
+      lines.push(`DTEND:${toICalLocalDateTime(endObj, ev.end_time || '10:00:00')}`);
     }
 
     if (ev.recurrence_type === 'weekly' && Array.isArray(ev.recurrence_days) && ev.recurrence_days.length > 0) {
