@@ -6096,3 +6096,73 @@ body.theme-hub .login-card { border-top: 2px solid var(--spruce-line); }
   .month-chip .mc-time, .month-chip .mc-title { display: none; }
   .month-more { font-size: 0.6rem; padding: 0; }
 }
+
+/* ---- Planner day view ---- */
+.day-name-link { background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; text-align: left; }
+.day-name-link:hover { text-decoration: underline; }
+
+.planner-dayview {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 12px 12px 90px;
+}
+.dv-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px 10px 64px;
+}
+.dv-header-dow { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #71717A; }
+.dv-header-num { font-size: 1.8rem; font-weight: 600; color: #18181B; line-height: 1; }
+.planner-dayview.is-today .dv-header-num {
+  background: #15803D; color: #fff; border-radius: 999px; padding: 4px 12px;
+}
+.dv-header-meta { display: flex; gap: 10px; font-size: 0.8rem; color: #52525B; flex: 1; }
+.dv-allday { margin: 0 0 8px 64px; }
+.dv-scroll {
+  max-height: calc(100vh - 260px);
+  min-height: 360px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--planner-border);
+  border-radius: 12px;
+}
+.dv-grid { position: relative; }
+.dv-hour-row { display: flex; box-sizing: border-box; }
+.dv-hour-label {
+  width: 56px; flex: none; text-align: right; padding-right: 8px;
+  font-size: 0.72rem; color: #71717A; transform: translateY(-7px);
+  font-variant-numeric: tabular-nums;
+}
+.dv-hour-line { flex: 1; border-top: 1px solid #E4E4E7; border-left: 1px solid #E4E4E7; cursor: pointer; }
+.dv-hour-row:first-child .dv-hour-line { border-top-color: transparent; }
+.dv-hour-line:hover { background: #FAFAF9; }
+.dv-events { position: absolute; top: 0; bottom: 0; left: 56px; right: 0; pointer-events: none; }
+.dv-event {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid;
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 2px 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.dv-event:hover { filter: brightness(0.96); z-index: 2; }
+.dv-event-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-event-time, .dv-event-loc { font-size: 0.7rem; opacity: 0.85; }
+.dv-now { position: absolute; left: 56px; right: 0; height: 2px; background: #DC2626; z-index: 3; pointer-events: none; }
+.dv-now::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #DC2626; }
+
+@media (max-width: 680px) {
+  .planner-dayview { padding: 8px 6px 90px; }
+  .dv-header { padding-left: 8px; }
+  .dv-allday { margin-left: 0; }
+  .dv-hour-label { width: 44px; }
+  .dv-events, .dv-now { left: 44px; }
+}

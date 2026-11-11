@@ -29,10 +29,12 @@ export async function mountPlanner(container, navigate) {
 
   // State
   let currentMonday = getMondayOfWeek(new Date());
-  let viewMode = 'week'; // 'week' | 'month'
+  let viewMode = 'week'; // 'day' | 'week' | 'month'
   try {
-    if (localStorage.getItem('andinu_planner_view') === 'month') viewMode = 'month';
+    const savedView = localStorage.getItem('andinu_planner_view');
+    if (savedView === 'month' || savedView === 'day') viewMode = savedView;
   } catch (_) { }
+  let currentDay = formatDateISO(new Date());
   let currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   let settings = null;
   let sleepDefaults = [];
@@ -526,14 +528,20 @@ export async function mountPlanner(container, navigate) {
   // Main Render Routine
   function render() {
     const isMonthView = viewMode === 'month';
+    const isDayView = viewMode === 'day';
+    const unitName = isMonthView ? 'Month' : isDayView ? 'Day' : 'Week';
     const weekDays = getDaysForWeek(currentMonday);
     const todayNow = new Date();
     const weekLabel = isMonthView
       ? currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      : formatWeekRangeLabel(currentMonday);
+      : isDayView
+        ? parseDateISO(currentDay).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+        : formatWeekRangeLabel(currentMonday);
     const thisMonday = getMondayOfWeek(todayNow);
     const isThisWeek = isMonthView
       ? (currentMonth.getFullYear() === todayNow.getFullYear() && currentMonth.getMonth() === todayNow.getMonth())
+      : isDayView
+      ? currentDay === formatDateISO(todayNow)
       : formatDateISO(currentMonday) === formatDateISO(thisMonday);
     const todayStr = formatDateISO(todayNow);
 
@@ -566,7 +574,7 @@ export async function mountPlanner(container, navigate) {
 
             <!-- Week Controls -->
             <div class="planner-week-controls">
-              <button id="btn-prev-week" class="planner-nav-btn" aria-label="Previous ${isMonthView ? 'Month' : 'Week'}" title="Previous ${isMonthView ? 'Month' : 'Week'}">
+              <button id="btn-prev-week" class="planner-nav-btn" aria-label="Previous ${unitName}" title="Previous ${unitName}">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
@@ -576,20 +584,21 @@ export async function mountPlanner(container, navigate) {
                 ${weekLabel}
               </div>
 
-              <button id="btn-next-week" class="planner-nav-btn" aria-label="Next ${isMonthView ? 'Month' : 'Week'}" title="Next ${isMonthView ? 'Month' : 'Week'}">
+              <button id="btn-next-week" class="planner-nav-btn" aria-label="Next ${unitName}" title="Next ${unitName}">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </button>
 
               <button id="btn-this-week" class="planner-today-btn ${isThisWeek ? 'is-current' : ''}">
-                ${isMonthView ? 'This Month' : 'This Week'}
+                ${isMonthView ? 'This Month' : isDayView ? 'Today' : 'This Week'}
               </button>
             </div>
 
             <!-- View Toggle -->
             <div class="planner-view-toggle" role="group" aria-label="Calendar view">
-              <button type="button" class="planner-view-btn ${isMonthView ? '' : 'active'}" data-set-view="week">Week</button>
+              <button type="button" class="planner-view-btn ${isDayView ? 'active' : ''}" data-set-view="day">Day</button>
+              <button type="button" class="planner-view-btn ${!isMonthView && !isDayView ? 'active' : ''}" data-set-view="week">Week</button>
               <button type="button" class="planner-view-btn ${isMonthView ? 'active' : ''}" data-set-view="month">Month</button>
             </div>
 
@@ -616,7 +625,7 @@ export async function mountPlanner(container, navigate) {
         </header>
 
         <!-- Mobile Sticky Mon-Sun Day Pill Strip (< 768px) -->
-        <nav class="planner-mobile-strip-wrap" aria-label="Day selection strip" ${isMonthView ? 'style="display:none"' : ''}>
+        <nav class="planner-mobile-strip-wrap" aria-label="Day selection strip" ${isMonthView || isDayView ? 'style="display:none"' : ''}>
           <div class="planner-mobile-strip">
             ${dayDataList.map(day => {
       const dots = {
@@ -648,7 +657,7 @@ export async function mountPlanner(container, navigate) {
 
         <!-- Main Weekly Board (Desktop 7-Col Grid / Mobile Vertical Stack) -->
         <main class="planner-board-container">
-          ${isMonthView ? renderMonthGrid(todayStr) : `
+          ${isMonthView ? renderMonthGrid(todayStr) : isDayView ? renderDayView(todayStr) : `
           <div class="planner-days-grid">
             ${dayDataList.map(day => renderDayColumn(day, todayStr)).join('')}
           </div>`}
@@ -724,6 +733,95 @@ export async function mountPlanner(container, navigate) {
       </div>`;
   }
 
+  // Render the Day View: all-day strip + 24h timeline with events positioned by time
+  function renderDayView(todayStr) {
+    const HOUR_PX = 60;
+    const iso = currentDay;
+    const dayEvents = projectEventsForDate(events, iso);
+    const sleep = resolveDaySleepPlan(iso, dayPlans, sleepDefaults);
+    const d = parseDateISO(iso);
+    const toMin = (t) => { const [h, m] = t.slice(0, 5).split(':').map(Number); return h * 60 + (m || 0); };
+
+    const allDay = dayEvents.filter(e => e.is_all_day || !e.start_time);
+    const timed = dayEvents.filter(e => !(e.is_all_day || !e.start_time)).map(ev => {
+      let start = ev.spanPosition === 'end' ? 0 : toMin(ev.start_time);
+      let end = ev.spanPosition === 'start' ? 1440 : (ev.end_time ? toMin(ev.end_time) : start + 60);
+      if (end <= start) end = Math.min(start + 30, 1440);
+      end = Math.max(end, start + 20); // minimum visible height
+      return { ev, start, end };
+    }).sort((a, b) => a.start - b.start || b.end - a.end);
+
+    // Lay out overlapping events into side-by-side columns
+    let cluster = [], clusterEnd = 0;
+    const flush = () => {
+      const colEnds = [];
+      cluster.forEach(item => {
+        let c = colEnds.findIndex(e => e <= item.start);
+        if (c < 0) { c = colEnds.length; colEnds.push(0); }
+        colEnds[c] = item.end;
+        item.col = c;
+      });
+      cluster.forEach(item => { item.cols = colEnds.length; });
+      cluster = [];
+    };
+    timed.forEach(item => {
+      if (cluster.length && item.start >= clusterEnd) { flush(); clusterEnd = 0; }
+      cluster.push(item);
+      clusterEnd = Math.max(clusterEnd, item.end);
+    });
+    flush();
+
+    const fmt = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const hourRows = Array.from({ length: 24 }, (_, h) => `
+      <div class="dv-hour-row" style="height:${HOUR_PX}px">
+        <div class="dv-hour-label">${h === 0 ? '' : `${String(h).padStart(2, '0')}:00`}</div>
+        <div class="dv-hour-line" data-add-for-date="${iso}" data-add-hour="${h}"></div>
+      </div>`).join('');
+
+    const blocks = timed.map(({ ev, start, end, col, cols }) => {
+      const owner = OWNER_TYPES[ev.owner_type] || OWNER_TYPES.together;
+      const height = Math.max(((end - start) / 60) * HOUR_PX - 2, 18);
+      const widthPct = 100 / cols;
+      const timeLabel = `${fmt(start)} – ${end >= 1440 ? '24:00' : fmt(end)}`;
+      return `
+        <div class="dv-event" data-edit-event="${ev.id}" data-event-id="${ev.id}" data-instance-date="${ev.occurrenceStart || iso}"
+          role="button" tabindex="0" title="${escapeHtml(ev.title)} (${timeLabel})"
+          style="top:${(start / 60) * HOUR_PX + 1}px;height:${height}px;left:calc(${col * widthPct}% + 2px);width:calc(${widthPct}% - 4px);background:${owner.bg};color:${owner.color};border-color:${owner.border}">
+          <span class="dv-event-title">${ev.spanPosition === 'middle' || ev.spanPosition === 'end' ? '← ' : ''}${escapeHtml(ev.title)}${ev.spanPosition === 'start' ? ' →' : ''}</span>
+          ${height >= 34 ? `<span class="dv-event-time">${timeLabel}</span>` : ''}
+          ${height >= 52 && ev.location ? `<span class="dv-event-loc">📍 ${escapeHtml(ev.location)}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    const isToday = iso === todayStr;
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+
+    return `
+      <div class="planner-dayview ${isToday ? 'is-today' : ''}">
+        <div class="dv-header">
+          <div class="dv-header-dow">${d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+          <div class="dv-header-num">${d.getDate()}</div>
+          <div class="dv-header-meta">
+            <span title="Sleep: ${sleep.locationMeta.label}">${sleep.locationMeta.icon}</span>
+            <span title="Bedtime">🌙 ${sleep.bedtime}</span>
+            <span title="Wake-up">⏰ ${sleep.wakeTime}</span>
+          </div>
+          <button class="day-quick-add-btn" data-add-for-date="${iso}" title="Add event"><span>+</span></button>
+        </div>
+        ${allDay.length ? `
+          <div class="dv-allday day-allday-events-strip">
+            ${allDay.map(ev => renderAllDayEventBar(ev, ev.occurrenceStart || iso)).join('')}
+          </div>` : ''}
+        <div class="dv-scroll" id="dv-scroll" data-first-event-min="${timed.length ? timed[0].start : ''}">
+          <div class="dv-grid" style="height:${24 * HOUR_PX}px">
+            ${hourRows}
+            <div class="dv-events">${blocks}</div>
+            ${isToday ? `<div class="dv-now" style="top:${(nowMin / 60) * HOUR_PX}px"></div>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+
   // Render a Single Day Column / Card
   function renderDayColumn(day, todayStr) {
     const sleep = day.sleepPlan;
@@ -736,7 +834,7 @@ export async function mountPlanner(container, navigate) {
         <!-- Day Column Header -->
         <div class="day-card-header">
           <div class="day-header-left">
-            <span class="day-name">${day.fullName}</span>
+            <button type="button" class="day-name day-name-link" data-open-day="${day.isoDate}" title="Open day view">${day.fullName}</button>
             <span class="day-date">${day.monthShort} ${day.dayNumber}</span>
             ${isToday ? '<span class="day-today-tag">Today</span>' : ''}
           </div>
@@ -1504,6 +1602,10 @@ export async function mountPlanner(container, navigate) {
     const shift = (dir) => {
       if (viewMode === 'month') {
         currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + dir, 1);
+      } else if (viewMode === 'day') {
+        const d = parseDateISO(currentDay);
+        d.setDate(d.getDate() + dir);
+        currentDay = formatDateISO(d);
       } else {
         const d = new Date(currentMonday);
         d.setDate(d.getDate() + dir * 7);
@@ -1516,6 +1618,7 @@ export async function mountPlanner(container, navigate) {
 
     document.getElementById('btn-this-week')?.addEventListener('click', () => {
       currentMonday = getMondayOfWeek(new Date());
+      currentDay = formatDateISO(new Date());
       currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
       render();
     });
@@ -1526,6 +1629,12 @@ export async function mountPlanner(container, navigate) {
         if (mode === viewMode) return;
         viewMode = mode;
         try { localStorage.setItem('andinu_planner_view', mode); } catch (_) { }
+        if (mode === 'day') {
+          // Today if it's in the viewed week, otherwise the week's Monday
+          const wk = getDaysForWeek(currentMonday).map(x => x.isoDate);
+          const t = formatDateISO(new Date());
+          if (!wk.includes(currentDay)) currentDay = wk.includes(t) ? t : wk[0];
+        }
         if (mode === 'month') {
           // Open the month containing the week being viewed (use Thursday, like ISO weeks)
           const thu = new Date(currentMonday);
@@ -1535,6 +1644,26 @@ export async function mountPlanner(container, navigate) {
         render();
       });
     });
+
+    // Week card day name -> day view
+    document.querySelectorAll('[data-open-day]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentDay = btn.getAttribute('data-open-day');
+        viewMode = 'day';
+        try { localStorage.setItem('andinu_planner_view', 'day'); } catch (_) { }
+        render();
+      });
+    });
+
+    // Day view: scroll timeline to now / first event / 07:00
+    const dvScroll = document.getElementById('dv-scroll');
+    if (dvScroll) {
+      const first = dvScroll.getAttribute('data-first-event-min');
+      const now = new Date();
+      const target = currentDay === formatDateISO(now) ? now.getHours() * 60 + now.getMinutes() - 60
+        : first !== '' ? Number(first) - 60 : 7 * 60;
+      dvScroll.scrollTop = Math.max(0, (target / 60) * 60);
+    }
 
     // Month cell click -> open that day's week
     document.querySelectorAll('[data-month-day]').forEach(el => {
@@ -1582,6 +1711,14 @@ export async function mountPlanner(container, navigate) {
         e.stopPropagation();
         const isoDate = btn.getAttribute('data-add-for-date');
         openEventModalForDate(isoDate);
+        const hour = btn.getAttribute('data-add-hour');
+        if (hour !== null) {
+          const h = Number(hour);
+          const st = document.getElementById('event-input-start');
+          const en = document.getElementById('event-input-end');
+          if (st) st.value = `${String(h).padStart(2, '0')}:00`;
+          if (en) en.value = `${String(Math.min(h + 1, 23)).padStart(2, '0')}:${h >= 23 ? '59' : '00'}`;
+        }
       });
     });
 
